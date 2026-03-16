@@ -153,6 +153,62 @@ ModLoader.add_game_menu_tab("my tab", my_panel)
 ModLoader.add_main_menu_button("some button", func(): print("hey"))
 ```
 
+### Settings Tab (v1.1.0+)
+
+Add a custom tab to the game's Settings Menu with proper sliders, toggles, and dropdowns that match the game's native look. Values auto-save and auto-load when a save prefix is set.
+
+```gdscript
+func _game_ready() -> void:
+    var tab = ModLoader.add_settings_tab("My Settings")
+    tab.set_save_prefix("mymod_")  # auto-persistence
+
+    # Controls — each returns the native Godot control for extra customization
+    tab.add_slider("amount", "my_amount", 0.0, 1.0, 0.05, 0.5)   # HSlider
+    tab.add_toggle("feature", "my_feature", false)                  # CheckButton
+    tab.add_option("mode", "my_mode", ["off", "low", "high"], 0)   # OptionButton
+    tab.add_spinbox("count", "my_count", 0, 100, 1, 10)            # SpinBox
+    tab.add_color("tint", "my_color", Color.WHITE)                  # ColorPickerButton
+    tab.add_text_input("name", "my_name", "default")                # LineEdit
+
+    # Visual elements (no key, not saved)
+    tab.add_header("section title")     # dimmed label
+    tab.add_separator()                 # horizontal line
+    tab.add_label("info text here")     # auto-wrapping text
+    tab.add_spacer(8.0)                 # vertical gap
+    tab.add_custom(my_control)          # any Control node
+
+    # Load saved values, connect to save
+    tab.load_values()
+    tab.saved.connect(_on_settings_saved)
+
+func _on_settings_saved(values: Dictionary) -> void:
+    # values = {"my_amount": 0.7, "my_feature": true, "my_mode": 2, ...}
+    _apply(values)
+```
+
+**Reading/writing values at any time:**
+
+```gdscript
+tab.get_value("my_amount")              # current control value
+tab.set_value("my_amount", 0.8)         # update control
+tab.set_values({"a": 1, "b": true})     # bulk set (great for presets)
+tab.get_all_values()                     # Dictionary of everything
+tab.get_container()                      # raw VBoxContainer for full control
+```
+
+**How persistence works:**
+
+When `set_save_prefix("mymod_")` is set:
+- On Settings Menu **save** → all values written to `settings_file` as `mymod_amount`, `mymod_feature`, etc.
+- On Settings Menu **open** → values loaded from `settings_file` back into controls.
+- First launch uses the `default_value` you passed to `add_slider`/`add_toggle`/etc.
+
+**Cleanup:**
+
+```gdscript
+tab.remove()  # removes the tab from Settings Menu
+```
+
 ### Talking to other mods
 
 ```gdscript
