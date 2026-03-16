@@ -34,6 +34,285 @@ class ModInfo:
 	var pck_path: String
 
 
+## Settings UI builder — returned by add_settings_tab().
+## Build controls with add_slider/add_toggle/add_option/etc.
+## Auto-saves to settings_file when save_prefix is set.
+## Emits saved(values) when the Settings Menu save button is pressed.
+class SettingsTab extends RefCounted:
+	signal saved(values: Dictionary)
+
+	var _vbox: VBoxContainer
+	var _scroll: ScrollContainer
+	var _controls: Dictionary = {}      # key -> Control
+	var _defaults: Dictionary = {}      # key -> default value
+	var _save_prefix: String = ""
+	var _settings_menu: Control  # SettingsMenu
+
+	func _setup(tab_container: TabContainer, tab_name: String, sm: Control) -> void:
+		_settings_menu = sm
+
+		_scroll = ScrollContainer.new()
+		_scroll.name = tab_name
+		_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		tab_container.add_child(_scroll)
+
+		var margin := MarginContainer.new()
+		margin.add_theme_constant_override("margin_left", 4)
+		margin.add_theme_constant_override("margin_right", 4)
+		margin.add_theme_constant_override("margin_top", 4)
+		margin.add_theme_constant_override("margin_bottom", 4)
+		_scroll.add_child(margin)
+
+		_vbox = VBoxContainer.new()
+		_vbox.add_theme_constant_override("separation", 2)
+		_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		margin.add_child(_vbox)
+
+		sm.saved.connect(_on_saved)
+		sm.visibility_changed.connect(_on_visible)
+
+
+	## Add a horizontal slider with label. Returns the HSlider.
+	func add_slider(label: String, key: String, min_v: float, max_v: float,
+			step_v: float, default_value: float = 0.0) -> HSlider:
+		_defaults[key] = default_value
+		var row := _make_row(label)
+		var slider := HSlider.new()
+		slider.min_value = min_v
+		slider.max_value = max_v
+		slider.step = step_v
+		slider.value = default_value
+		slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		slider.scrollable = false
+		row.add_child(slider)
+		_controls[key] = slider
+		return slider
+
+
+	## Add a spin box with label. Returns the SpinBox.
+	func add_spinbox(label: String, key: String, min_v: float, max_v: float,
+			step_v: float, default_value: float = 0.0) -> SpinBox:
+		_defaults[key] = default_value
+		var row := _make_row(label)
+		var spinbox := SpinBox.new()
+		spinbox.min_value = min_v
+		spinbox.max_value = max_v
+		spinbox.step = step_v
+		spinbox.value = default_value
+		spinbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		spinbox.get_line_edit().context_menu_enabled = false
+		row.add_child(spinbox)
+		_controls[key] = spinbox
+		return spinbox
+
+
+	## Add a toggle (CheckButton) with label. Returns the CheckButton.
+	func add_toggle(label: String, key: String, default_value: bool = false) -> CheckButton:
+		_defaults[key] = default_value
+		var row := _make_row(label)
+		var btn := CheckButton.new()
+		btn.button_pressed = default_value
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(btn)
+		_controls[key] = btn
+		return btn
+
+
+	## Add a dropdown selector with label. items is Array[String]. Returns OptionButton.
+	func add_option(label: String, key: String, items: Array,
+			default_index: int = 0) -> OptionButton:
+		_defaults[key] = default_index
+		var row := _make_row(label)
+		var opt := OptionButton.new()
+		for i in items.size():
+			opt.add_item(str(items[i]), i)
+		opt.selected = default_index
+		opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(opt)
+		_controls[key] = opt
+		return opt
+
+
+	## Add a color picker with label. Returns ColorPickerButton.
+	func add_color(label: String, key: String,
+			default_value: Color = Color.WHITE) -> ColorPickerButton:
+		_defaults[key] = default_value
+		var row := _make_row(label)
+		var picker := ColorPickerButton.new()
+		picker.color = default_value
+		picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(picker)
+		_controls[key] = picker
+		return picker
+
+
+	## Add a text input with label. Returns LineEdit.
+	func add_text_input(label: String, key: String,
+			default_value: String = "") -> LineEdit:
+		_defaults[key] = default_value
+		var row := _make_row(label)
+		var line := LineEdit.new()
+		line.text = default_value
+		line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(line)
+		_controls[key] = line
+		return line
+
+
+	## Add a section header label (dimmed).
+	func add_header(text: String) -> Label:
+		var label := Label.new()
+		label.text = text
+		label.modulate = Color(1, 1, 1, 0.6)
+		_vbox.add_child(label)
+		return label
+
+
+	## Add an info label (full-width, auto-wrapping).
+	func add_label(text: String) -> Label:
+		var label := Label.new()
+		label.text = text
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_vbox.add_child(label)
+		return label
+
+
+	## Add a horizontal separator line.
+	func add_separator() -> HSeparator:
+		var sep := HSeparator.new()
+		_vbox.add_child(sep)
+		return sep
+
+
+	## Add vertical spacing.
+	func add_spacer(height: float = 4.0) -> Control:
+		var spacer := Control.new()
+		spacer.custom_minimum_size = Vector2(0, height)
+		_vbox.add_child(spacer)
+		return spacer
+
+
+	## Add a custom control to the layout (not tracked by key).
+	func add_custom(control: Control) -> void:
+		_vbox.add_child(control)
+
+
+	## Get the raw VBoxContainer for fully custom layouts.
+	func get_container() -> VBoxContainer:
+		return _vbox
+
+
+	## Get current value of a control by key.
+	func get_value(key: String) -> Variant:
+		if key not in _controls:
+			return _defaults.get(key)
+		var ctrl = _controls[key]
+		if ctrl is CheckButton:
+			return ctrl.button_pressed
+		if ctrl is HSlider or ctrl is SpinBox:
+			return ctrl.value
+		if ctrl is OptionButton:
+			return ctrl.selected
+		if ctrl is ColorPickerButton:
+			return ctrl.color
+		if ctrl is LineEdit:
+			return ctrl.text
+		return null
+
+
+	## Set value of a control by key.
+	func set_value(key: String, value: Variant) -> void:
+		if key not in _controls:
+			return
+		var ctrl = _controls[key]
+		if ctrl is CheckButton:
+			ctrl.button_pressed = value
+		elif ctrl is HSlider or ctrl is SpinBox:
+			ctrl.value = value
+		elif ctrl is OptionButton:
+			if value is int:
+				ctrl.selected = value
+			elif value is String:
+				for i in ctrl.item_count:
+					if ctrl.get_item_text(i) == str(value):
+						ctrl.selected = i
+						break
+		elif ctrl is ColorPickerButton:
+			ctrl.color = value
+		elif ctrl is LineEdit:
+			ctrl.text = str(value)
+
+
+	## Bulk-set multiple values.
+	func set_values(values: Dictionary) -> void:
+		for key in values:
+			set_value(key, values[key])
+
+
+	## Get all control values as a Dictionary.
+	func get_all_values() -> Dictionary:
+		var result: Dictionary = {}
+		for key in _controls:
+			result[key] = get_value(key)
+		return result
+
+
+	## Set the save-file key prefix for auto-persistence.
+	## When set, values auto-save on Settings save and auto-load on open.
+	func set_save_prefix(prefix: String) -> void:
+		_save_prefix = prefix
+
+
+	## Manually load values from save file (uses save_prefix + key).
+	func load_values() -> void:
+		if _save_prefix == "" or not Ref.save_file_manager:
+			return
+		for key in _defaults:
+			var saved = Ref.save_file_manager.settings_file.get_data(
+				_save_prefix + key, null)
+			if saved != null:
+				set_value(key, saved)
+
+
+	## Remove this tab from the Settings Menu.
+	func remove() -> void:
+		if _scroll and is_instance_valid(_scroll):
+			_scroll.queue_free()
+
+
+	func _save_values() -> void:
+		if _save_prefix == "" or not Ref.save_file_manager:
+			return
+		for key in _controls:
+			Ref.save_file_manager.settings_file.set_data(
+				_save_prefix + key, get_value(key))
+
+
+	func _on_saved() -> void:
+		if _save_prefix != "":
+			_save_values()
+		saved.emit(get_all_values())
+
+
+	func _on_visible() -> void:
+		if not _settings_menu or not _settings_menu.visible:
+			return
+		load_values()
+
+
+	func _make_row(label_text: String) -> HBoxContainer:
+		var row := HBoxContainer.new()
+		row.custom_minimum_size = Vector2(0, 14)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_vbox.add_child(row)
+		var label := Label.new()
+		label.text = label_text
+		label.custom_minimum_size = Vector2(86, 0)
+		label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		row.add_child(label)
+		return row
+
+
 var mods: Dictionary = {}
 var _load_order: Array[String] = []
 var _item_paths: Array[String] = []
@@ -41,6 +320,7 @@ var _hooks: Dictionary = {}
 var _method_patches: Dictionary = {}  # "id.method" -> patch info
 var _scene_injections: Array[Dictionary] = []  # queued until tree is ready
 var _registered_resources: Dictionary = {}  # "items" / "recipes" / etc -> paths
+var _settings_tabs: Array = []  # prevent GC on SettingsTab refs
 var _mods_dir_path: String
 var _bootstrapped: bool = false
 var _mods_menu: Control = null
@@ -58,7 +338,7 @@ func _bootstrap() -> void:
 
 	_mods_dir_path = OS.get_executable_path().get_base_dir().path_join("mods")
 	_load_self_config()
-	print("[QualiaMods] v1.0.0 — Phase 2 starting")
+	print("[QualiaMods] v1.1.0 — Phase 2 starting")
 	print("[QualiaMods] Game version: ", ProjectSettings.get_setting("application/config/version"))
 	print("[QualiaMods] Mods dir: %s" % _mods_dir_path)
 
@@ -645,6 +925,33 @@ func add_game_menu_tab(tab_name: String, content: Control) -> Control:
 	content.name = tab_name
 	tab_container.add_child(content)
 	return content
+
+
+## Add a new tab to the Settings Menu. Returns a SettingsTab builder.
+## Use the returned object to add sliders, toggles, dropdowns, etc.
+## Example:
+##   var tab = ModLoader.add_settings_tab("My Tab")
+##   tab.set_save_prefix("mymod_")
+##   tab.add_toggle("feature", "my_feature", false)
+##   tab.add_slider("amount", "my_amount", 0.0, 1.0, 0.05, 0.5)
+##   tab.load_values()
+##   tab.saved.connect(_on_my_settings_saved)
+func add_settings_tab(tab_name: String) -> SettingsTab:
+	var sm = Ref.settings_menu
+	if not sm:
+		printerr("[QualiaMods] add_settings_tab: SettingsMenu not found")
+		return null
+
+	var tab_container = sm.get_node_or_null("%TabContainer")
+	if not tab_container:
+		printerr("[QualiaMods] add_settings_tab: TabContainer not found")
+		return null
+
+	var tab := SettingsTab.new()
+	tab._setup(tab_container, tab_name, sm)
+	_settings_tabs.append(tab)
+	print("[QualiaMods] Settings tab '%s' added" % tab_name)
+	return tab
 
 
 func add_main_menu_button(text: String, callback: Callable, after_button: String = "SettingsButton") -> Button:
