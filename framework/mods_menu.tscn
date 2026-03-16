@@ -1,0 +1,235 @@
+[gd_scene format=3]
+
+[ext_resource type="Theme" uid="uid://dwi7e6nyjnpxm" path="res://main/ui/theme/theme.tres" id="1"]
+[ext_resource type="Script" path="res://main/ui/menu/mods_menu/mods_menu.gd" id="2"]
+[ext_resource type="Material" uid="uid://cmnc836osimkc" path="res://main/ui/backgrounds/background.tres" id="3"]
+[ext_resource type="Texture2D" uid="uid://dxjsistinltg8" path="res://main/ui/backgrounds/wallpaper_home.jpg" id="4"]
+[ext_resource type="Script" uid="uid://rqb2m5pfwggo" path="res://main/ui/theme/sound_button.gd" id="5"]
+[ext_resource type="Texture2D" uid="uid://bura0jbtf17vh" path="res://main/ui/theme/panel/box_cancel.png" id="6"]
+[ext_resource type="Texture2D" uid="uid://dvwqia0yoqdrl" path="res://main/ui/theme/panel/hover_box_cancel_clean.png" id="7"]
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_back_n"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 5.0
+content_margin_bottom = 5.0
+texture = ExtResource("6")
+texture_margin_left = 4.0
+texture_margin_top = 4.0
+texture_margin_right = 4.0
+texture_margin_bottom = 4.0
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_back_p"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 5.0
+content_margin_bottom = 5.0
+texture = ExtResource("6")
+texture_margin_left = 2.0
+texture_margin_top = 2.0
+texture_margin_right = 3.0
+texture_margin_bottom = 3.0
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_back_h"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 5.0
+content_margin_bottom = 5.0
+texture = ExtResource("7")
+texture_margin_left = 2.0
+texture_margin_top = 2.0
+texture_margin_right = 3.0
+texture_margin_bottom = 3.0
+
+[node name="ModsMenu" type="Control"]
+z_index = 1
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("1")
+script = ExtResource("2")
+
+[node name="Background" type="TextureRect" parent="."]
+modulate = Color(0.6, 0.65, 0.72, 1)
+material = ExtResource("3")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("4")
+expand_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 6
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Header" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="MarginContainer/VBoxContainer/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "mods"
+
+[node name="BackButton" type="Button" parent="MarginContainer/VBoxContainer/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_hover_color = Color(0.92, 0.8464, 0.8464, 1)
+theme_override_styles/normal = SubResource("StyleBoxTexture_back_n")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_back_p")
+theme_override_styles/hover = SubResource("StyleBoxTexture_back_h")
+theme_override_styles/focus = SubResource("StyleBoxTexture_back_h")
+text = "back"
+script = ExtResource("5")
+back_button = true
+
+[node name="Content" type="HSplitContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+split_offset = 100
+
+[node name="LeftPanel" type="PanelContainer" parent="MarginContainer/VBoxContainer/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 0.45
+
+[node name="VBox" type="VBoxContainer" parent="MarginContainer/VBoxContainer/Content/LeftPanel"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="ListHeader" type="Label" parent="MarginContainer/VBoxContainer/Content/LeftPanel/VBox"]
+layout_mode = 2
+text = "installed"
+horizontal_alignment = 1
+
+[node name="ScrollContainer" type="ScrollContainer" parent="MarginContainer/VBoxContainer/Content/LeftPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="ModList" type="VBoxContainer" parent="MarginContainer/VBoxContainer/Content/LeftPanel/VBox/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 1
+
+[node name="NoModsLabel" type="Label" parent="MarginContainer/VBoxContainer/Content/LeftPanel/VBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.5)
+text = "no mods found
+place .pck files in the mods/ folder"
+horizontal_alignment = 1
+
+[node name="DetailPanel" type="PanelContainer" parent="MarginContainer/VBoxContainer/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 0.55
+
+[node name="ScrollContainer" type="ScrollContainer" parent="MarginContainer/VBoxContainer/Content/DetailPanel"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="VBox" type="VBoxContainer" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="ModName" type="Label" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "mod name"
+
+[node name="InfoRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer/VBox"]
+layout_mode = 2
+
+[node name="ModVersion" type="Label" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer/VBox/InfoRow"]
+unique_name_in_owner = true
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.6)
+text = "v1.0.0"
+
+[node name="ModAuthor" type="Label" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer/VBox/InfoRow"]
+unique_name_in_owner = true
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.6)
+text = "by author"
+
+[node name="Separator1" type="HSeparator" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer/VBox"]
+layout_mode = 2
+
+[node name="ModDescription" type="Label" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "description"
+autowrap_mode = 2
+
+[node name="Separator2" type="HSeparator" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer/VBox"]
+layout_mode = 2
+
+[node name="DepsLabel" type="Label" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer/VBox"]
+layout_mode = 2
+text = "dependencies"
+modulate = Color(1, 1, 1, 0.6)
+
+[node name="ModDependencies" type="Label" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "none"
+autowrap_mode = 2
+
+[node name="Separator3" type="HSeparator" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer/VBox"]
+layout_mode = 2
+
+[node name="ConfigLabel" type="Label" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer/VBox"]
+layout_mode = 2
+text = "config"
+modulate = Color(1, 1, 1, 0.6)
+
+[node name="ConfigList" type="VBoxContainer" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="SaveConfigButton" type="Button" parent="MarginContainer/VBoxContainer/Content/DetailPanel/ScrollContainer/VBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 4
+text = "save config"
+script = ExtResource("5")
+
+[node name="RestartNote" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+modulate = Color(1, 1, 1, 0.4)
+text = "toggle changes take effect after restart"
+horizontal_alignment = 1
+
+[node name="SoundBoard" type="BaseButton" parent="."]
+unique_name_in_owner = true
+visible = false
+script = ExtResource("5")
