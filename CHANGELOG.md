@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.2.0
+
+### Added
+- **Loading screen** — shows mod loading progress during startup with per-mod status indicators and progress bar, styled to match the game's visual language (Silkscreen font, dark theme, pixel-art panels)
+- **Splash screen replacement** — replaces the game's default splash image with QualiaMods branding during world startup
+- **Async bootstrap** — mods initialize asynchronously, yielding frames for UI updates
+- **Subfolder support** — PCK files in subdirectories of `mods/` are now discovered and loaded
+- **Config hints** — `[config_min]`, `[config_max]`, `[config_step]` sections in mod.cfg to define numeric ranges for config values
+- Config hints applied to SpinBox controls in Mods Menu (default max raised from 100 to 10000)
+
 ## v1.1.0
 
 ### Added
