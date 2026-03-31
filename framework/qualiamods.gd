@@ -29,6 +29,7 @@ class ModInfo:
 	var dependencies: Dictionary
 	var load_order: int
 	var config: Dictionary
+	var config_hints: Dictionary  # { "key": { "min": float, "max": float, "step": float } }
 	var instance: Node
 	var enabled: bool
 	var pck_path: String
@@ -325,6 +326,7 @@ var _mods_dir_path: String
 var _bootstrapped: bool = false
 var _mods_menu: Control = null
 var _key_menu: int = KEY_F10
+var i18n: Node = null  # i18n_manager instance
 
 signal mods_initialized
 signal mod_loaded(mod_id: String)
@@ -338,7 +340,7 @@ func _bootstrap() -> void:
 
 	_mods_dir_path = OS.get_executable_path().get_base_dir().path_join("mods")
 	_load_self_config()
-	print("[QualiaMods] v1.1.0 — Phase 2 starting")
+	print("[QualiaMods] v1.3.0 — Phase 2 starting")
 	print("[QualiaMods] Game version: ", ProjectSettings.get_setting("application/config/version"))
 	print("[QualiaMods] Mods dir: %s" % _mods_dir_path)
 
@@ -350,9 +352,37 @@ func _bootstrap() -> void:
 
 	_discover_mods()
 	_resolve_load_order()
-	_initialize_mods()
+	_init_i18n()
+	_create_loading_screen()
+	await RenderingServer.frame_post_draw
+	await _initialize_mods_async()
+	_finalize_loading_screen()
 	_connect_game_hooks.call_deferred()
 	mods_initialized.emit()
+
+
+func _init_i18n() -> void:
+	var i18n_script = load("res://mods/qualiamods/i18n/i18n_manager.gd")
+	if not i18n_script:
+		print("[QualiaMods] i18n module not found, skipping")
+		return
+
+	i18n = i18n_script.new()
+	i18n.name = "I18nManager"
+	add_child(i18n)
+
+	# 1. global translations from <game_dir>/lang/*.cfg
+	i18n.load_global_translations()
+
+	# 2. per-mod translations from res://mods/<id>/lang/*.cfg
+	i18n.load_mod_translations(_load_order)
+
+	# 3. restore saved locale choice
+	i18n.apply_saved_locale()
+
+	# patch existing tree after a frame so the game UI is loaded
+	i18n.patch_tree.call_deferred()
+	print("[QualiaMods] i18n initialized")
 
 
 func _load_self_config() -> void:
@@ -380,36 +410,48 @@ static func _key_from_name(n: String) -> int:
 	return KEY_F10
 
 
-# find .pck files in the mods folder and register them
+# find .pck files in the mods folder (and subfolders) and register them
 func _scan_loaded_mods() -> void:
-	var dir := DirAccess.open(_mods_dir_path)
+	var disabled_cfg := ConfigFile.new()
+	disabled_cfg.load(_mods_dir_path.path_join("disabled_mods.cfg"))
+	_scan_dir_recursive(_mods_dir_path, disabled_cfg)
+
+
+func _scan_dir_recursive(path: String, disabled_cfg: ConfigFile) -> void:
+	var dir := DirAccess.open(path)
 	if not dir:
 		return
 
-	var disabled_cfg := ConfigFile.new()
-	disabled_cfg.load(_mods_dir_path.path_join("disabled_mods.cfg"))
-
 	dir.list_dir_begin()
-	var file := dir.get_next()
-	while file != "":
-		if file.ends_with(".pck"):
-			var mod_id := file.get_basename()
+	var entry := dir.get_next()
+	while entry != "":
+		var full_path := path.path_join(entry)
+		if dir.current_is_dir() and not entry.begins_with("."):
+			_scan_dir_recursive(full_path, disabled_cfg)
+		elif entry.ends_with(".pck"):
+			var mod_id := entry.get_basename()
 
 			# don't register ourselves
 			if mod_id.begins_with("_000_qualiamods"):
-				file = dir.get_next()
+				entry = dir.get_next()
 				continue
+
+			# load .pck from subfolders (vanilla loader only scans root)
+			if path != _mods_dir_path:
+				ProjectSettings.load_resource_pack(full_path)
+				print("[QualiaMods] Loaded .pck from subfolder: %s" % full_path)
 
 			var is_disabled: bool = disabled_cfg.get_value("disabled", mod_id, false)
 			var info := ModInfo.new()
 			info.id = mod_id
-			info.pck_path = _mods_dir_path.path_join(file)
+			info.pck_path = full_path
 			info.enabled = not is_disabled
 			info.name = mod_id
 			info.version = "?"
 			info.author = "?"
 			info.load_order = 0
 			info.config = {}
+			info.config_hints = {}
 			info.dependencies = {}
 			mods[mod_id] = info
 
@@ -417,7 +459,7 @@ func _scan_loaded_mods() -> void:
 				print("[QualiaMods] Found disabled: %s" % mod_id)
 			else:
 				print("[QualiaMods] Found: %s" % mod_id)
-		file = dir.get_next()
+		entry = dir.get_next()
 
 
 # read mod.cfg for each mod — name, version, deps, config, etc.
@@ -449,6 +491,16 @@ func _discover_mods() -> void:
 		if cfg.has_section("config"):
 			for key in cfg.get_section_keys("config"):
 				info.config[key] = cfg.get_value("config", key)
+
+		# parse config hints (min/max/step) for numeric values
+		info.config_hints = {}
+		for hint_section in ["config_min", "config_max", "config_step"]:
+			if cfg.has_section(hint_section):
+				var hint_type: String = hint_section.trim_prefix("config_")
+				for key in cfg.get_section_keys(hint_section):
+					if key not in info.config_hints:
+						info.config_hints[key] = {}
+					info.config_hints[key][hint_type] = cfg.get_value(hint_section, key)
 
 		# per-mod config overrides from <mod_id>.cfg next to the pck
 		var override_path := _mods_dir_path.path_join("%s.cfg" % mod_id)
@@ -507,23 +559,199 @@ func _topo_sort(mod_id: String, sorted: Array[String], visited: Dictionary, visi
 	sorted.append(mod_id)
 
 
+# ── Loading screen ────────────────────────────────────────────────
+
+var _loading_layer: CanvasLayer
+var _loading_progress_bar: ProgressBar
+var _loading_status_label: Label
+var _loading_mod_list: VBoxContainer
+
+
+func _create_loading_screen() -> void:
+	_replace_splash_content()
+
+	_loading_layer = CanvasLayer.new()
+	_loading_layer.layer = 128
+	_loading_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+
+	var game_theme: Theme = load("res://main/ui/theme/theme.tres")
+
+	var bg_rect := ColorRect.new()
+	bg_rect.color = Color(0, 0, 0, 1)
+	bg_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if game_theme:
+		bg_rect.theme = game_theme
+	_loading_layer.add_child(bg_rect)
+
+	var panel := PanelContainer.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	panel.custom_minimum_size = Vector2(160, 0)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	bg_rect.add_child(panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 6)
+	margin.add_theme_constant_override("margin_right", 6)
+	margin.add_theme_constant_override("margin_top", 4)
+	margin.add_theme_constant_override("margin_bottom", 4)
+	panel.add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
+	margin.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "loading mods"
+	title.add_theme_font_size_override("font_size", 10)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
+
+	var enabled_count := 0
+	for id in mods:
+		if mods[id].enabled:
+			enabled_count += 1
+
+	vbox.add_child(HSeparator.new())
+
+	_loading_mod_list = VBoxContainer.new()
+	_loading_mod_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_loading_mod_list.add_theme_constant_override("separation", 1)
+	vbox.add_child(_loading_mod_list)
+
+	for mod_id in _load_order:
+		var info: ModInfo = mods[mod_id]
+		if not info.enabled:
+			continue
+		var row := HBoxContainer.new()
+		row.name = "row_%s" % mod_id
+		row.add_theme_constant_override("separation", 4)
+
+		var status_icon := Label.new()
+		status_icon.name = "status"
+		status_icon.text = ".."
+		status_icon.custom_minimum_size = Vector2(14, 0)
+		status_icon.modulate = Color(1, 1, 1, 0.3)
+		row.add_child(status_icon)
+
+		var name_label := Label.new()
+		name_label.text = "%s" % info.name.to_lower()
+		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_label.modulate = Color(1, 1, 1, 0.3)
+		row.add_child(name_label)
+
+		_loading_mod_list.add_child(row)
+
+	vbox.add_child(HSeparator.new())
+
+	_loading_progress_bar = ProgressBar.new()
+	_loading_progress_bar.min_value = 0
+	_loading_progress_bar.max_value = enabled_count
+	_loading_progress_bar.value = 0
+	_loading_progress_bar.custom_minimum_size = Vector2(0, 8)
+	_loading_progress_bar.show_percentage = false
+	var bar_bg := StyleBoxFlat.new()
+	bar_bg.bg_color = Color(0.031, 0.031, 0.039, 1.0)
+	bar_bg.anti_aliasing = false
+	_loading_progress_bar.add_theme_stylebox_override("background", bar_bg)
+	var bar_fill := StyleBoxFlat.new()
+	bar_fill.bg_color = Color(0.208, 0.208, 0.231, 1.0)
+	bar_fill.anti_aliasing = false
+	_loading_progress_bar.add_theme_stylebox_override("fill", bar_fill)
+	vbox.add_child(_loading_progress_bar)
+
+	_loading_status_label = Label.new()
+	_loading_status_label.text = "scanning..."
+	_loading_status_label.modulate = Color(1, 1, 1, 0.4)
+	vbox.add_child(_loading_status_label)
+
+	add_child(_loading_layer)
+	print("[QualiaMods] Loading screen created")
+
+
+func _replace_splash_content() -> void:
+	var splash_layer := get_tree().get_root().get_node_or_null("Main/SplashLayer")
+	if not splash_layer:
+		print("[QualiaMods] SplashLayer not found, skipping replacement")
+		return
+
+	var splash_img := splash_layer.get_node_or_null("Splash")
+	if splash_img:
+		splash_img.visible = false
+
+	var game_theme: Theme = load("res://main/ui/theme/theme.tres")
+
+	var container := CenterContainer.new()
+	container.name = "QualiaModsSplash"
+	container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if game_theme:
+		container.theme = game_theme
+	splash_layer.add_child(container)
+
+	var label := Label.new()
+	label.text = "loading..."
+	label.add_theme_font_size_override("font_size", 10)
+	label.modulate = Color(1, 1, 1, 0.4)
+	container.add_child(label)
+
+	print("[QualiaMods] SplashLayer content replaced")
+
+
+func _update_loading_progress(mod_id: String, status: String, done: bool) -> void:
+	_loading_status_label.text = status.to_lower()
+
+	var row = _loading_mod_list.get_node_or_null("row_%s" % mod_id)
+	if row:
+		var status_label: Label = row.get_node("status")
+		var name_label: Label = row.get_children()[1]
+		if done:
+			status_label.text = "ok"
+			status_label.modulate = Color(1, 1, 1, 0.7)
+			name_label.modulate = Color(1, 1, 1, 0.7)
+		else:
+			status_label.text = ">>"
+			status_label.modulate = Color(1, 1, 1, 0.5)
+			name_label.modulate = Color(1, 1, 1, 0.5)
+
+	if done:
+		_loading_progress_bar.value += 1
+
+
+func _finalize_loading_screen() -> void:
+	if not _loading_layer:
+		return
+	_loading_status_label.text = "done"
+	get_tree().create_timer(1.0).timeout.connect(func():
+		if _loading_layer and is_instance_valid(_loading_layer):
+			_loading_layer.queue_free()
+			_loading_layer = null
+			print("[QualiaMods] Loading screen overlay removed")
+	)
+
+
 # load mod_main.gd for each mod, add to tree, call _init_mod
-func _initialize_mods() -> void:
+func _initialize_mods_async() -> void:
 	for mod_id in _load_order:
 		var info: ModInfo = mods[mod_id]
 		if not info.enabled:
 			print("[QualiaMods] Skipping disabled: %s" % mod_id)
 			continue
 
+		_update_loading_progress(mod_id, "Loading %s..." % info.name, false)
+		await RenderingServer.frame_post_draw
+
 		var script_path := "res://mods/%s/mod_main.gd" % mod_id
 		if not FileAccess.file_exists(script_path):
 			print("[QualiaMods] '%s' — resource-only (no mod_main.gd)" % mod_id)
+			_update_loading_progress(mod_id, "%s (resource-only)" % info.name, true)
 			mod_loaded.emit(mod_id)
+			await RenderingServer.frame_post_draw
 			continue
 
 		var script := load(script_path)
 		if not script:
 			printerr("[QualiaMods] Failed to load: %s" % script_path)
+			await RenderingServer.frame_post_draw
 			continue
 
 		var instance: Node = script.new()
@@ -535,7 +763,9 @@ func _initialize_mods() -> void:
 			instance._init_mod(info.config)
 
 		print("[QualiaMods] Initialized: %s v%s" % [info.name, info.version])
+		_update_loading_progress(mod_id, "%s v%s" % [info.name, info.version], true)
 		mod_loaded.emit(mod_id)
+		await RenderingServer.frame_post_draw
 
 	print("[QualiaMods] Done. %d mod(s) in load order." % _load_order.size())
 
@@ -563,6 +793,7 @@ func _connect_game_hooks() -> void:
 	print("[QualiaMods] Game hooks connected.")
 
 	_inject_mods_button.call_deferred()
+	_inject_language_selector.call_deferred()
 
 	# let mods know the game is ready
 	for mod_id in _load_order:
@@ -576,7 +807,7 @@ func _connect_game_hooks() -> void:
 	emit_hook(Hooks.MODS_ALL_READY)
 
 
-# shove a "mods" button into the main menu next to settings
+# inject mods + language buttons in a single row after settings
 func _inject_mods_button() -> void:
 	var main_menu = get_tree().get_root().get_node_or_null("Main/UI/MainMenu")
 	if not main_menu:
@@ -589,26 +820,115 @@ func _inject_mods_button() -> void:
 		return
 
 	var btn_container = settings_btn.get_parent()
+	var sound_script = load("res://main/ui/theme/sound_button.gd")
+
+	# row container for mods + language
+	var row := HBoxContainer.new()
+	row.name = "QualiaModsRow"
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 2)
 
 	var mods_btn := Button.new()
 	mods_btn.text = "mods"
 	mods_btn.name = "ModsButton"
-
-	# match the look of existing buttons
-	mods_btn.size_flags_horizontal = settings_btn.size_flags_horizontal
-	mods_btn.custom_minimum_size = settings_btn.custom_minimum_size
-
-	# click sounds
-	var sound_script = load("res://main/ui/theme/sound_button.gd")
+	mods_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if sound_script:
 		mods_btn.set_script(sound_script)
+	mods_btn.pressed.connect(_on_mods_button_pressed)
+	row.add_child(mods_btn)
 
 	var settings_idx: int = settings_btn.get_index()
-	btn_container.add_child(mods_btn)
-	btn_container.move_child(mods_btn, settings_idx + 1)
+	btn_container.add_child(row)
+	btn_container.move_child(row, settings_idx + 1)
 
-	mods_btn.pressed.connect(_on_mods_button_pressed)
 	print("[QualiaMods] Mods button injected into main menu.")
+
+
+var _lang_menu: Control = null
+
+func _inject_language_selector() -> void:
+	if not i18n or i18n.available_locales.size() < 2:
+		print("[QualiaMods] Less than 2 locales, skipping language selector")
+		return
+
+	var main_menu = get_tree().get_root().get_node_or_null("Main/UI/MainMenu")
+	if not main_menu:
+		return
+
+	var row = main_menu.find_child("QualiaModsRow", true, false)
+	if not row:
+		print("[QualiaMods] QualiaModsRow not found, skipping language selector")
+		return
+
+	var sound_script = load("res://main/ui/theme/sound_button.gd")
+
+	var lang_btn := Button.new()
+	lang_btn.name = "LanguageButton"
+	lang_btn.text = "lang"
+	lang_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if sound_script:
+		lang_btn.set_script(sound_script)
+
+	lang_btn.pressed.connect(_on_lang_button_pressed)
+	row.add_child(lang_btn)
+
+	print("[QualiaMods] Language button injected (%d locales)" % i18n.available_locales.size())
+
+
+func _on_lang_button_pressed() -> void:
+	var main_menu = get_tree().get_root().get_node_or_null("Main/UI/MainMenu")
+	if main_menu and main_menu.has_method("deactivate"):
+		main_menu.deactivate()
+
+	await Ref.trans.open()
+
+	_ensure_lang_menu()
+	_lang_menu.open()
+	if main_menu:
+		main_menu.visible = false
+
+	await Ref.trans.close()
+	_lang_menu.activate()
+
+
+func _ensure_lang_menu() -> void:
+	if _lang_menu:
+		return
+
+	var menu_script = load("res://mods/qualiamods/i18n/language_menu.gd")
+	if not menu_script:
+		printerr("[QualiaMods] Could not load language menu")
+		return
+
+	_lang_menu = menu_script.new()
+	_lang_menu.name = "LanguageMenu"
+
+	var ui_layer = get_tree().get_root().get_node_or_null("Main/UI")
+	if ui_layer:
+		ui_layer.add_child(_lang_menu)
+	else:
+		get_tree().get_root().add_child(_lang_menu)
+
+	_lang_menu.close()
+
+	if _lang_menu.has_signal("exited"):
+		_lang_menu.exited.connect(_on_lang_menu_exited)
+
+
+func _on_lang_menu_exited() -> void:
+	_lang_menu.deactivate()
+
+	await Ref.trans.open()
+
+	_lang_menu.close()
+	var main_menu = get_tree().get_root().get_node_or_null("Main/UI/MainMenu")
+	if main_menu:
+		main_menu.visible = true
+
+	await Ref.trans.close()
+
+	if main_menu and main_menu.has_method("activate"):
+		main_menu.activate()
 
 
 func _on_mods_button_pressed() -> void:
@@ -1001,6 +1321,52 @@ func broadcast_message(sender_mod_id: String, data: Dictionary) -> void:
 		var info: ModInfo = mods[mod_id]
 		if info.enabled and info.instance and info.instance.has_method("_on_mod_message"):
 			info.instance._on_mod_message(sender_mod_id, data)
+
+
+# ── i18n public API ───────────────────────────────────────────────
+
+## Set the active locale (e.g. "ru", "ja", "en").
+func set_locale(locale: String) -> void:
+	if i18n:
+		i18n.set_locale(locale)
+
+
+## Get the current locale code.
+func get_locale() -> String:
+	if i18n:
+		return i18n.get_locale()
+	return "en"
+
+
+## Get all available locales loaded from mod translations.
+func get_available_locales() -> Array[String]:
+	if i18n:
+		return i18n.get_available_locales()
+	return []
+
+
+## Load a single .cfg translation file at runtime.
+func load_translation(cfg_path: String) -> void:
+	if not i18n:
+		printerr("[QualiaMods] i18n not initialized")
+		return
+	i18n.load_translation_file(cfg_path)
+
+
+## Re-scan <game_dir>/lang/ for new translation files.
+func reload_translations() -> void:
+	if not i18n:
+		printerr("[QualiaMods] i18n not initialized")
+		return
+	i18n.load_global_translations()
+	i18n.load_mod_translations(_load_order)
+
+
+## Get display name for a locale (e.g. "ru" -> "Русский").
+func get_locale_display_name(locale: String) -> String:
+	if i18n:
+		return i18n.get_locale_display_name(locale)
+	return locale
 
 
 func _notification(what: int) -> void:

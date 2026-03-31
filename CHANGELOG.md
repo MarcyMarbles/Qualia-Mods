@@ -1,5 +1,39 @@
 # Changelog
 
+## v1.3.0
+
+### Added
+- **i18n system** — runtime localization for the game and mods
+  - Translators drop `.cfg` files into `<game_dir>/lang/` — no mod needed
+  - Mods can include their own translations in `mods/<id>/lang/`
+  - Framework scans global translations first, then per-mod
+  - Language menu accessible from main menu (mods | lang row)
+  - Locale choice persists across sessions (`lang/settings.cfg`)
+  - Automatic `english.cfg` fallback creation if missing
+- **Translation format** — Godot ConfigFile with `[meta]` + `[strings]` sections
+  - Keys must be quoted to preserve spaces: `"exit game" = "(終了)"`
+  - `locale` field for explicit locale code, `displayName` for the selector
+  - Fallback locale guessing from displayName if `locale` is omitted
+- **Dynamic text translation** — button hover/state changes caught via signal hooks (`mouse_entered`, `mouse_exited`, `pressed`, `visibility_changed`)
+- **Public API**
+  - `ModLoader.set_locale(locale)` — switch language at runtime
+  - `ModLoader.get_locale()` — current locale code
+  - `ModLoader.get_available_locales()` — list of loaded locales
+  - `ModLoader.get_locale_display_name(locale)` — display name for selector
+  - `ModLoader.load_translation(path)` — load a .cfg translation file manually
+  - `ModLoader.reload_translations()` — rescan all translation sources
+- **SDK** — `sdk/i18n/strings.cfg` template with all game UI strings, translation examples in `sdk/examples/minimal/lang/` and `sdk/template/lang/`
+
+## v1.2.0
+
+### Added
+- **Loading screen** — shows mod loading progress during startup with per-mod status indicators and progress bar, styled to match the game's visual language (Silkscreen font, dark theme, pixel-art panels)
+- **Splash screen replacement** — replaces the game's default splash image with QualiaMods branding during world startup
+- **Async bootstrap** — mods initialize asynchronously, yielding frames for UI updates
+- **Subfolder support** — PCK files in subdirectories of `mods/` are now discovered and loaded
+- **Config hints** — `[config_min]`, `[config_max]`, `[config_step]` sections in mod.cfg to define numeric ranges for config values
+- Config hints applied to SpinBox controls in Mods Menu (default max raised from 100 to 10000)
+
 ## v1.1.0
 
 ### Added
