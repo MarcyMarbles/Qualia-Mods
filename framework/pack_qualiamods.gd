@@ -9,6 +9,9 @@ extends SceneTree
 const MOD_FILES: Array[String] = [
 	"res://main/autoload/ref.gd",
 	"res://mods/qualiamods/qualiamods.gd",
+	"res://mods/qualiamods/i18n/i18n_manager.gd",
+	"res://mods/qualiamods/i18n/translation_loader.gd",
+	"res://mods/qualiamods/i18n/language_menu.gd",
 	"res://main/ui/menu/mods_menu/mods_menu.gd",
 	"res://main/ui/menu/mods_menu/mods_menu.tscn",
 ]

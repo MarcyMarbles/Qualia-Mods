@@ -326,6 +326,7 @@ var _mods_dir_path: String
 var _bootstrapped: bool = false
 var _mods_menu: Control = null
 var _key_menu: int = KEY_F10
+var i18n: Node = null  # i18n_manager instance
 
 signal mods_initialized
 signal mod_loaded(mod_id: String)
@@ -339,7 +340,7 @@ func _bootstrap() -> void:
 
 	_mods_dir_path = OS.get_executable_path().get_base_dir().path_join("mods")
 	_load_self_config()
-	print("[QualiaMods] v1.2.0 — Phase 2 starting")
+	print("[QualiaMods] v1.3.0 — Phase 2 starting")
 	print("[QualiaMods] Game version: ", ProjectSettings.get_setting("application/config/version"))
 	print("[QualiaMods] Mods dir: %s" % _mods_dir_path)
 
@@ -351,12 +352,37 @@ func _bootstrap() -> void:
 
 	_discover_mods()
 	_resolve_load_order()
+	_init_i18n()
 	_create_loading_screen()
 	await RenderingServer.frame_post_draw
 	await _initialize_mods_async()
 	_finalize_loading_screen()
 	_connect_game_hooks.call_deferred()
 	mods_initialized.emit()
+
+
+func _init_i18n() -> void:
+	var i18n_script = load("res://mods/qualiamods/i18n/i18n_manager.gd")
+	if not i18n_script:
+		print("[QualiaMods] i18n module not found, skipping")
+		return
+
+	i18n = i18n_script.new()
+	i18n.name = "I18nManager"
+	add_child(i18n)
+
+	# 1. global translations from <game_dir>/lang/*.cfg
+	i18n.load_global_translations()
+
+	# 2. per-mod translations from res://mods/<id>/lang/*.cfg
+	i18n.load_mod_translations(_load_order)
+
+	# 3. restore saved locale choice
+	i18n.apply_saved_locale()
+
+	# patch existing tree after a frame so the game UI is loaded
+	i18n.patch_tree.call_deferred()
+	print("[QualiaMods] i18n initialized")
 
 
 func _load_self_config() -> void:
@@ -767,6 +793,7 @@ func _connect_game_hooks() -> void:
 	print("[QualiaMods] Game hooks connected.")
 
 	_inject_mods_button.call_deferred()
+	_inject_language_selector.call_deferred()
 
 	# let mods know the game is ready
 	for mod_id in _load_order:
@@ -780,7 +807,7 @@ func _connect_game_hooks() -> void:
 	emit_hook(Hooks.MODS_ALL_READY)
 
 
-# shove a "mods" button into the main menu next to settings
+# inject mods + language buttons in a single row after settings
 func _inject_mods_button() -> void:
 	var main_menu = get_tree().get_root().get_node_or_null("Main/UI/MainMenu")
 	if not main_menu:
@@ -793,26 +820,115 @@ func _inject_mods_button() -> void:
 		return
 
 	var btn_container = settings_btn.get_parent()
+	var sound_script = load("res://main/ui/theme/sound_button.gd")
+
+	# row container for mods + language
+	var row := HBoxContainer.new()
+	row.name = "QualiaModsRow"
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 2)
 
 	var mods_btn := Button.new()
 	mods_btn.text = "mods"
 	mods_btn.name = "ModsButton"
-
-	# match the look of existing buttons
-	mods_btn.size_flags_horizontal = settings_btn.size_flags_horizontal
-	mods_btn.custom_minimum_size = settings_btn.custom_minimum_size
-
-	# click sounds
-	var sound_script = load("res://main/ui/theme/sound_button.gd")
+	mods_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if sound_script:
 		mods_btn.set_script(sound_script)
+	mods_btn.pressed.connect(_on_mods_button_pressed)
+	row.add_child(mods_btn)
 
 	var settings_idx: int = settings_btn.get_index()
-	btn_container.add_child(mods_btn)
-	btn_container.move_child(mods_btn, settings_idx + 1)
+	btn_container.add_child(row)
+	btn_container.move_child(row, settings_idx + 1)
 
-	mods_btn.pressed.connect(_on_mods_button_pressed)
 	print("[QualiaMods] Mods button injected into main menu.")
+
+
+var _lang_menu: Control = null
+
+func _inject_language_selector() -> void:
+	if not i18n or i18n.available_locales.size() < 2:
+		print("[QualiaMods] Less than 2 locales, skipping language selector")
+		return
+
+	var main_menu = get_tree().get_root().get_node_or_null("Main/UI/MainMenu")
+	if not main_menu:
+		return
+
+	var row = main_menu.find_child("QualiaModsRow", true, false)
+	if not row:
+		print("[QualiaMods] QualiaModsRow not found, skipping language selector")
+		return
+
+	var sound_script = load("res://main/ui/theme/sound_button.gd")
+
+	var lang_btn := Button.new()
+	lang_btn.name = "LanguageButton"
+	lang_btn.text = "lang"
+	lang_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if sound_script:
+		lang_btn.set_script(sound_script)
+
+	lang_btn.pressed.connect(_on_lang_button_pressed)
+	row.add_child(lang_btn)
+
+	print("[QualiaMods] Language button injected (%d locales)" % i18n.available_locales.size())
+
+
+func _on_lang_button_pressed() -> void:
+	var main_menu = get_tree().get_root().get_node_or_null("Main/UI/MainMenu")
+	if main_menu and main_menu.has_method("deactivate"):
+		main_menu.deactivate()
+
+	await Ref.trans.open()
+
+	_ensure_lang_menu()
+	_lang_menu.open()
+	if main_menu:
+		main_menu.visible = false
+
+	await Ref.trans.close()
+	_lang_menu.activate()
+
+
+func _ensure_lang_menu() -> void:
+	if _lang_menu:
+		return
+
+	var menu_script = load("res://mods/qualiamods/i18n/language_menu.gd")
+	if not menu_script:
+		printerr("[QualiaMods] Could not load language menu")
+		return
+
+	_lang_menu = menu_script.new()
+	_lang_menu.name = "LanguageMenu"
+
+	var ui_layer = get_tree().get_root().get_node_or_null("Main/UI")
+	if ui_layer:
+		ui_layer.add_child(_lang_menu)
+	else:
+		get_tree().get_root().add_child(_lang_menu)
+
+	_lang_menu.close()
+
+	if _lang_menu.has_signal("exited"):
+		_lang_menu.exited.connect(_on_lang_menu_exited)
+
+
+func _on_lang_menu_exited() -> void:
+	_lang_menu.deactivate()
+
+	await Ref.trans.open()
+
+	_lang_menu.close()
+	var main_menu = get_tree().get_root().get_node_or_null("Main/UI/MainMenu")
+	if main_menu:
+		main_menu.visible = true
+
+	await Ref.trans.close()
+
+	if main_menu and main_menu.has_method("activate"):
+		main_menu.activate()
 
 
 func _on_mods_button_pressed() -> void:
@@ -1205,6 +1321,52 @@ func broadcast_message(sender_mod_id: String, data: Dictionary) -> void:
 		var info: ModInfo = mods[mod_id]
 		if info.enabled and info.instance and info.instance.has_method("_on_mod_message"):
 			info.instance._on_mod_message(sender_mod_id, data)
+
+
+# ── i18n public API ───────────────────────────────────────────────
+
+## Set the active locale (e.g. "ru", "ja", "en").
+func set_locale(locale: String) -> void:
+	if i18n:
+		i18n.set_locale(locale)
+
+
+## Get the current locale code.
+func get_locale() -> String:
+	if i18n:
+		return i18n.get_locale()
+	return "en"
+
+
+## Get all available locales loaded from mod translations.
+func get_available_locales() -> Array[String]:
+	if i18n:
+		return i18n.get_available_locales()
+	return []
+
+
+## Load a single .cfg translation file at runtime.
+func load_translation(cfg_path: String) -> void:
+	if not i18n:
+		printerr("[QualiaMods] i18n not initialized")
+		return
+	i18n.load_translation_file(cfg_path)
+
+
+## Re-scan <game_dir>/lang/ for new translation files.
+func reload_translations() -> void:
+	if not i18n:
+		printerr("[QualiaMods] i18n not initialized")
+		return
+	i18n.load_global_translations()
+	i18n.load_mod_translations(_load_order)
+
+
+## Get display name for a locale (e.g. "ru" -> "Русский").
+func get_locale_display_name(locale: String) -> String:
+	if i18n:
+		return i18n.get_locale_display_name(locale)
+	return locale
 
 
 func _notification(what: int) -> void:
