@@ -18,6 +18,9 @@ var _translations: Dictionary = {}
 # track connected buttons to avoid double-connecting
 var _connected_buttons: Dictionary = {}  # instance_id -> true
 
+# original english text: instance_id -> { prop -> original_text }
+var _originals: Dictionary = {}
+
 var _current_locale: String = ""
 var _game_dir: String
 var _config_path: String
@@ -127,10 +130,23 @@ func patch_tree() -> void:
 
 func _retranslate_tree() -> void:
 	if _current_locale == "" or _current_locale == "en":
+		_restore_originals()
 		return
 	if _current_locale not in _translations:
 		return
 	_retranslate_recursive(get_tree().get_root())
+
+
+func _restore_originals() -> void:
+	for id in _originals.keys():
+		var node := instance_from_id(id)
+		if not is_instance_valid(node):
+			_originals.erase(id)
+			continue
+		var props: Dictionary = _originals[id]
+		for prop in props:
+			node.set(prop, props[prop])
+	_originals.clear()
 
 
 func _retranslate_recursive(node: Node) -> void:
@@ -151,9 +167,15 @@ func _try_translate_prop(node: Object, prop: String) -> void:
 	var current: String = node.get(prop)
 	if current == "":
 		return
+	var id: int = node.get_instance_id()
 	var lookup := current.to_lower().strip_edges()
 	var dict: Dictionary = _translations[_current_locale]
 	if lookup in dict and dict[lookup] != current:
+		# save original text before first translation
+		if id not in _originals:
+			_originals[id] = {}
+		if prop not in _originals[id]:
+			_originals[id][prop] = current
 		node.set(prop, dict[lookup])
 
 

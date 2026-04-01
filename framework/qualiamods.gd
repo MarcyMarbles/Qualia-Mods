@@ -349,6 +349,7 @@ func _bootstrap() -> void:
 
 	if mods.is_empty():
 		print("[QualiaMods] No mods found.")
+		_deferred_inject_language.call_deferred()
 		return
 
 	_discover_mods()
@@ -847,6 +848,12 @@ func _inject_mods_button() -> void:
 
 var _lang_menu: Control = null
 
+
+func _deferred_inject_language() -> void:
+	await get_tree().process_frame
+	_inject_language_selector()
+
+
 func _inject_language_selector() -> void:
 	if not i18n or i18n.available_locales.size() < 2:
 		print("[QualiaMods] Less than 2 locales, skipping language selector")
@@ -858,14 +865,23 @@ func _inject_language_selector() -> void:
 
 	var row = main_menu.find_child("QualiaModsRow", true, false)
 	if not row:
-		print("[QualiaMods] QualiaModsRow not found, skipping language selector")
-		return
+		# no mods loaded — create standalone row for the language button
+		var settings_btn = main_menu.get_node_or_null("%SettingsButton")
+		if not settings_btn:
+			return
+		row = HBoxContainer.new()
+		row.name = "QualiaModsRow"
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_theme_constant_override("separation", 2)
+		var idx: int = settings_btn.get_index()
+		settings_btn.get_parent().add_child(row)
+		settings_btn.get_parent().move_child(row, idx + 1)
 
 	var sound_script = load("res://main/ui/theme/sound_button.gd")
 
 	var lang_btn := Button.new()
 	lang_btn.name = "LanguageButton"
-	lang_btn.text = "lang"
+	lang_btn.text = "Language" if mods.is_empty() else "lang"
 	lang_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if sound_script:
 		lang_btn.set_script(sound_script)
