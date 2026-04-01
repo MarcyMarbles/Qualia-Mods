@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.3.1
+
+### Fixed
+- **i18n no longer depends on mods** — global translations from `<game_dir>/lang/` now load even when no mods are installed; previously the early return on empty mods list skipped i18n initialization entirely
+- Split i18n init into two phases: global translations load before the mods check, per-mod translations load after dependency resolution
+
 ## v1.3.0
 
 ### Added

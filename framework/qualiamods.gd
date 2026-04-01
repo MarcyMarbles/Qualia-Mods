@@ -345,6 +345,7 @@ func _bootstrap() -> void:
 	print("[QualiaMods] Mods dir: %s" % _mods_dir_path)
 
 	_scan_loaded_mods()
+	_init_i18n()
 
 	if mods.is_empty():
 		print("[QualiaMods] No mods found.")
@@ -352,7 +353,7 @@ func _bootstrap() -> void:
 
 	_discover_mods()
 	_resolve_load_order()
-	_init_i18n()
+	_load_mod_translations()
 	_create_loading_screen()
 	await RenderingServer.frame_post_draw
 	await _initialize_mods_async()
@@ -371,18 +372,18 @@ func _init_i18n() -> void:
 	i18n.name = "I18nManager"
 	add_child(i18n)
 
-	# 1. global translations from <game_dir>/lang/*.cfg
+	# global translations from <game_dir>/lang/*.cfg — always available
 	i18n.load_global_translations()
-
-	# 2. per-mod translations from res://mods/<id>/lang/*.cfg
-	i18n.load_mod_translations(_load_order)
-
-	# 3. restore saved locale choice
 	i18n.apply_saved_locale()
-
-	# patch existing tree after a frame so the game UI is loaded
 	i18n.patch_tree.call_deferred()
-	print("[QualiaMods] i18n initialized")
+	print("[QualiaMods] i18n initialized (global)")
+
+
+func _load_mod_translations() -> void:
+	if not i18n:
+		return
+	i18n.load_mod_translations(_load_order)
+	print("[QualiaMods] i18n mod translations loaded (%d mods)" % _load_order.size())
 
 
 func _load_self_config() -> void:
