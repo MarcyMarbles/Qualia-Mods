@@ -15,10 +15,16 @@ var available_locales: Array[String] = []
 # locale -> { lowercase_key -> translated_string }
 var _translations: Dictionary = {}
 
+# locale -> { "font_path": String, "font_size": int }
+var _locale_fonts: Dictionary = {}
+
+# cached FontFile objects: font_path -> FontFile
+var _font_cache: Dictionary = {}
+
 # track connected buttons to avoid double-connecting
 var _connected_buttons: Dictionary = {}  # instance_id -> true
 
-# original english text: instance_id -> { prop -> original_text }
+# original english text/font: instance_id -> { prop -> original_value }
 var _originals: Dictionary = {}
 
 var _current_locale: String = ""
@@ -68,10 +74,23 @@ func _scan_lang_dir(lang_dir: String, source: String) -> void:
 	dir.list_dir_begin()
 	var entry := dir.get_next()
 	while entry != "":
+		var full_path := lang_dir.path_join(entry)
 		if entry.ends_with(".cfg") and entry != "settings.cfg":
-			var data := TranslationLoader.load_cfg(lang_dir.path_join(entry))
+			var data := TranslationLoader.load_cfg(full_path)
 			if data:
 				_register_translation(data, source)
+		elif DirAccess.dir_exists_absolute(full_path) and not entry.begins_with("."):
+			# scan subfolders like lang/ja/ja.cfg
+			var sub_dir := DirAccess.open(full_path)
+			if sub_dir:
+				sub_dir.list_dir_begin()
+				var sub_entry := sub_dir.get_next()
+				while sub_entry != "":
+					if sub_entry.ends_with(".cfg"):
+						var data := TranslationLoader.load_cfg(full_path.path_join(sub_entry))
+						if data:
+							_register_translation(data, source)
+					sub_entry = sub_dir.get_next()
 		entry = dir.get_next()
 	available_locales.sort()
 	print("[i18n] Available locales: %s" % str(available_locales))
@@ -93,6 +112,19 @@ func _register_translation(data, source: String = "") -> void:
 	locale_names[locale] = data.display_name
 	if locale not in available_locales:
 		available_locales.append(locale)
+
+	if data.font_path != "" or data.font_size > 0:
+		_locale_fonts[locale] = {
+			"font_path": data.font_path,
+			"font_size": data.font_size,
+		}
+		var parts: Array[String] = []
+		if data.font_path != "":
+			parts.append(data.font_path.get_file())
+		if data.font_size > 0:
+			parts.append("size %d" % data.font_size)
+		print("[i18n] Font for %s: %s" % [locale, ", ".join(parts)])
+
 	var src := " [%s]" % source if source != "" else ""
 	print("[i18n] Registered: %s (%s)%s — %d strings" % [data.display_name, locale, src, data.translation_dict.size() - 1])
 
@@ -135,6 +167,7 @@ func _retranslate_tree() -> void:
 	if _current_locale not in _translations:
 		return
 	_retranslate_recursive(get_tree().get_root())
+	_apply_locale_font(get_tree().get_root())
 
 
 func _restore_originals() -> void:
@@ -145,8 +178,69 @@ func _restore_originals() -> void:
 			continue
 		var props: Dictionary = _originals[id]
 		for prop in props:
-			node.set(prop, props[prop])
+			if prop == "__font":
+				var original_font = props[prop]
+				if original_font == null:
+					node.remove_theme_font_override("font")
+				else:
+					node.add_theme_font_override("font", original_font)
+			elif prop == "__font_size":
+				var original_size: int = props[prop]
+				if original_size == 0:
+					node.remove_theme_font_size_override("font_size")
+				else:
+					node.add_theme_font_size_override("font_size", original_size)
+			else:
+				node.set(prop, props[prop])
 	_originals.clear()
+
+
+func _get_locale_font() -> FontFile:
+	if _current_locale not in _locale_fonts:
+		return null
+	var font_path: String = _locale_fonts[_current_locale]["font_path"]
+	if font_path == "":
+		return null
+	if font_path in _font_cache:
+		return _font_cache[font_path]
+	var font := FontFile.new()
+	if font.load_dynamic_font(font_path) != OK:
+		printerr("[i18n] Failed to load font: %s" % font_path)
+		return null
+	_font_cache[font_path] = font
+	print("[i18n] Font loaded: %s" % font_path.get_file())
+	return font
+
+
+func _get_locale_font_size() -> int:
+	if _current_locale not in _locale_fonts:
+		return 0
+	return _locale_fonts[_current_locale]["font_size"]
+
+
+func _apply_locale_font(root: Node) -> void:
+	var font := _get_locale_font()
+	var font_size := _get_locale_font_size()
+	if font == null and font_size == 0:
+		return
+	_apply_font_recursive(root, font, font_size)
+
+
+func _apply_font_recursive(node: Node, font: FontFile, font_size: int) -> void:
+	if node is Label or node is Button or node is RichTextLabel or node is LineEdit:
+		var id := node.get_instance_id()
+		if id not in _originals:
+			_originals[id] = {}
+		if font and "__font" not in _originals[id]:
+			var current_font = node.get_theme_font("font") if node.has_theme_font_override("font") else null
+			_originals[id]["__font"] = current_font
+			node.add_theme_font_override("font", font)
+		if font_size > 0 and "__font_size" not in _originals[id]:
+			var current_size: int = node.get_theme_font_size("font_size") if node.has_theme_font_size_override("font_size") else 0
+			_originals[id]["__font_size"] = current_size
+			node.add_theme_font_size_override("font_size", font_size)
+	for child in node.get_children():
+		_apply_font_recursive(child, font, font_size)
 
 
 func _retranslate_recursive(node: Node) -> void:
@@ -223,6 +317,8 @@ func _on_node_added(node: Node) -> void:
 		_translate_new_node.call_deferred(node, "text")
 	elif node is LineEdit:
 		_translate_new_node.call_deferred(node, "text")
+	if node is Label or node is Button or node is RichTextLabel or node is LineEdit:
+		_apply_font_to_new_node.call_deferred(node)
 
 
 func _translate_and_hook_button(button: Button) -> void:
@@ -236,6 +332,26 @@ func _translate_new_node(node: Node, prop: String) -> void:
 	if not is_instance_valid(node):
 		return
 	_try_translate_prop(node, prop)
+
+
+func _apply_font_to_new_node(node: Control) -> void:
+	if not is_instance_valid(node):
+		return
+	var font := _get_locale_font()
+	var font_size := _get_locale_font_size()
+	if font == null and font_size == 0:
+		return
+	var id := node.get_instance_id()
+	if id not in _originals:
+		_originals[id] = {}
+	if font and "__font" not in _originals[id]:
+		var current_font = node.get_theme_font("font") if node.has_theme_font_override("font") else null
+		_originals[id]["__font"] = current_font
+		node.add_theme_font_override("font", font)
+	if font_size > 0 and "__font_size" not in _originals[id]:
+		var current_size: int = node.get_theme_font_size("font_size") if node.has_theme_font_size_override("font_size") else 0
+		_originals[id]["__font_size"] = current_size
+		node.add_theme_font_size_override("font_size", font_size)
 
 
 func _save_locale(locale: String) -> void:

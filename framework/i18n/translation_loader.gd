@@ -16,6 +16,8 @@ class TranslationData:
 	var display_name: String
 	var translation_dict: Dictionary  # { lowercase_key -> value, "__locale__" -> locale }
 	var file_path: String
+	var font_path: String = ""        # absolute path to .ttf/.otf, empty = use game default
+	var font_size: int = 0            # 0 = use game default
 
 
 static func load_cfg(path: String) -> TranslationData:
@@ -51,6 +53,18 @@ static func load_cfg(path: String) -> TranslationData:
 	data.display_name = display_name
 	data.translation_dict = dict
 	data.file_path = path
+
+	# font settings from [meta]
+	var font_file: String = cfg.get_value("meta", "font", "")
+	if font_file != "":
+		var cfg_dir := path.get_base_dir()
+		var abs_font := cfg_dir.path_join(font_file)
+		if FileAccess.file_exists(abs_font):
+			data.font_path = abs_font
+		else:
+			printerr("[i18n] Font not found: %s (referenced in %s)" % [abs_font, path])
+
+	data.font_size = cfg.get_value("meta", "fontSize", 0)
 
 	print("[i18n] Loaded '%s' (%s) — %d strings from %s" % [display_name, locale, dict.size() - 1, path])
 	return data

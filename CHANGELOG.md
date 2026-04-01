@@ -2,9 +2,17 @@
 
 ## v1.3.1
 
+### Added
+- **Lang subfolder support** — translations can now live in subfolders like `lang/ja/japanese.cfg` alongside font files, instead of only flat `lang/*.cfg`
+- **Per-locale custom fonts** — `font = "filename.ttf"` and `fontSize = 12` in `[meta]` section of translation `.cfg`; font path resolved relative to the `.cfg` file
+- **Language button without mods** — "Language" button now appears in main menu even with zero mods installed (shows "lang" when mods are present)
+- **Packer: imported resource support** — `pack_qualiamods.gd` now parses `.import` files to find compiled resources in `.godot/imported/` (`.ctex`, `.fontdata`, etc.) and packs them alongside source files automatically
+- **Packer: directory scanning** — `SCAN_DIRS` array for recursive resource discovery; moddders add their directory and the packer picks up fonts, textures, themes, etc.
+
 ### Fixed
 - **i18n no longer depends on mods** — global translations from `<game_dir>/lang/` now load even when no mods are installed; previously the early return on empty mods list skipped i18n initialization entirely
 - Split i18n init into two phases: global translations load before the mods check, per-mod translations load after dependency resolution
+- **Locale restore** — switching back to English now restores original text and fonts; previously switching away from a non-English locale was a one-way operation
 
 ## v1.3.0
 
