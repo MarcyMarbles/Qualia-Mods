@@ -8,12 +8,12 @@ extends "res://mods/qualiamods/mod_base.gd"
 
 
 func _setup() -> void:
-	log("Hello from minimal mod!")
+	log_info("Hello from minimal mod!")
 
 
 func _game_ready() -> void:
-	log("Game tree is ready, player: %s" % Ref.player)
+	log_info("Game tree is ready, player: %s" % Ref.player)
 
 
 func _on_game_playable() -> void:
-	log("Game is playable! Player position: %s" % Ref.player.global_position)
+	log_info("Game is playable! Player position: %s" % Ref.player.global_position)

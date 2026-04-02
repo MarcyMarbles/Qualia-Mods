@@ -22,7 +22,7 @@ func _setup() -> void:
 	#   func _on_world_loaded() -> void:
 	# Они подписываются автоматически — add_hook() не нужен.
 
-	log("Initialized")
+	log_info("Initialized")
 
 
 ## Called when the game scene tree is ready.

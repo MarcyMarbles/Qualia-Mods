@@ -50,7 +50,7 @@ func _cleanup() -> void: pass
 # ── Convenience methods ──────────────────────────────────────────
 
 ## Print a log line prefixed with [mod_id].
-func log(message: String) -> void: pass
+func log_info(message: String) -> void: pass
 
 ## Read a config value with a default fallback.
 func get_cfg(key: String, default = null): return default

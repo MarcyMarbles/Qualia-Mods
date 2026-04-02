@@ -49,10 +49,10 @@ game_version = "2.8.7"
 extends "res://mods/qualiamods/mod_base.gd"
 
 func _setup() -> void:
-    log("Hello world!")
+    log_info("Hello world!")
 
 func _on_game_playable() -> void:
-    log("Player position: %s" % Ref.player.global_position)
+    log_info("Player position: %s" % Ref.player.global_position)
 ```
 
 That's it. No `const MOD_ID`, no manual hook subscriptions, no boilerplate.
@@ -92,10 +92,10 @@ Just define `_on_<hook_name>()` methods — they auto-subscribe:
 
 ```gdscript
 func _on_world_loaded() -> void:
-    log("World loaded!")
+    log_info("World loaded!")
 
 func _on_game_quit() -> void:
-    log("Goodbye!")
+    log_info("Goodbye!")
 ```
 
 Available hooks: `world_loaded`, `game_playable`, `game_quit`, `all_loaded`,
@@ -181,6 +181,6 @@ ModBase is a convenience layer — it doesn't limit what you can do.
 | mod_id | `const MOD_ID := "..."` | Auto-detected |
 | Config | `var config; func _init_mod(cfg): config = cfg` | Pre-populated |
 | Hooks | `ModLoader.add_hook(Hooks.X, method)` | Name method `_on_x()` |
-| Logging | `ModLoader.log_mod(MOD_ID, msg)` | `log(msg)` |
+| Logging | `ModLoader.log_mod(MOD_ID, msg)` | `log_info(msg)` |
 | Settings | 6+ lines of setup | `settings_tab("name")` |
 | Cleanup | Manual `remove_hook` calls | Automatic |

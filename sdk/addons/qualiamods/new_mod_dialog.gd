@@ -149,7 +149,7 @@ const MOD_MAIN_TEMPLATE := \
 
 
 func _setup() -> void:
-	log("Initialized")
+	log_info("Initialized")
 
 
 func _game_ready() -> void:

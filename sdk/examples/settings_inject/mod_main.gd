@@ -13,9 +13,9 @@ func _game_ready() -> void:
 	tab.load_values()
 	tab.saved.connect(_on_settings_saved)
 
-	log("Settings tab injected")
+	log_info("Settings tab injected")
 
 
 func _on_settings_saved(values: Dictionary) -> void:
 	config.merge(values, true)
-	log("Settings saved: my_feature=%s" % values.get("my_feature"))
+	log_info("Settings saved: my_feature=%s" % values.get("my_feature"))

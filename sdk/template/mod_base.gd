@@ -6,7 +6,7 @@ extends Node
 ##   - mod_id auto-detected from your folder name (no const needed)
 ##   - config dict pre-populated from mod.cfg [config] + user overrides
 ##   - methods named _on_<hook> auto-subscribe to ModLoader hooks
-##   - convenience: log(), get_cfg(), settings_tab()
+##   - convenience: log_info(), get_cfg(), settings_tab()
 ##
 ## Lifecycle (override what you need):
 ##   _setup()           — called after config + hooks are wired
@@ -18,7 +18,7 @@ extends Node
 ##   extends "res://mods/qualiamods/mod_base.gd"
 ##
 ##   func _on_game_playable() -> void:
-##       log("Hello from %s!" % mod_id)
+##       log_info("Hello from %s!" % mod_id)
 
 ## Auto-detected from folder name. Read-only for subclasses.
 var mod_id: String
@@ -78,7 +78,7 @@ func _cleanup() -> void:
 # ── Convenience methods ──────────────────────────────────────────
 
 ## Print a log line prefixed with [mod_id].
-func log(message: String) -> void:
+func log_info(message: String) -> void:
 	ModLoader.log_mod(mod_id, message)
 
 
