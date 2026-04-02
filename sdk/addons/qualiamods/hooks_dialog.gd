@@ -69,6 +69,8 @@ func _init() -> void:
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 6)
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	add_child(vbox)
 
 	var hint := Label.new()
@@ -76,24 +78,29 @@ func _init() -> void:
 	vbox.add_child(hint)
 
 	var split := HSplitContainer.new()
-	split.custom_minimum_size = Vector2(0, 240)
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	split.dragger_visibility = SplitContainer.DRAGGER_VISIBLE
 	vbox.add_child(split)
 
 	_hook_list = ItemList.new()
-	_hook_list.custom_minimum_size = Vector2(180, 0)
+	_hook_list.custom_minimum_size = Vector2(190, 0)
+	_hook_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_hook_list.item_selected.connect(_on_hook_selected)
 	split.add_child(_hook_list)
 
 	var right := VBoxContainer.new()
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right.add_theme_constant_override("separation", 4)
 	split.add_child(right)
 
 	_desc_label = RichTextLabel.new()
 	_desc_label.bbcode_enabled = true
-	_desc_label.fit_content = true
-	_desc_label.custom_minimum_size = Vector2(0, 120)
+	_desc_label.fit_content = false
+	_desc_label.scroll_following = true
 	_desc_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_desc_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right.add_child(_desc_label)
 
 	_insert_btn = Button.new()
