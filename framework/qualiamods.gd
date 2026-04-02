@@ -345,6 +345,12 @@ func _bootstrap() -> void:
 	print("[QualiaMods] Mods dir: %s" % _mods_dir_path)
 
 	_scan_loaded_mods()
+
+	# Editor mode: discover loose mod directories in res://mods/
+	# so developers can hit Play and test without packing .pck files.
+	if OS.has_feature("editor"):
+		_scan_editor_mods()
+
 	_init_i18n()
 
 	if mods.is_empty():
@@ -461,6 +467,48 @@ func _scan_dir_recursive(path: String, disabled_cfg: ConfigFile) -> void:
 				print("[QualiaMods] Found disabled: %s" % mod_id)
 			else:
 				print("[QualiaMods] Found: %s" % mod_id)
+		entry = dir.get_next()
+
+
+# editor mode: scan res://mods/ for loose directories with mod.cfg
+# allows testing mods without packing .pck — just hit Play in editor
+func _scan_editor_mods() -> void:
+	var dir := DirAccess.open("res://mods")
+	if not dir:
+		print("[QualiaMods] Editor mode: res://mods/ not found")
+		return
+
+	print("[QualiaMods] Editor mode: scanning res://mods/ for loose mods")
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while entry != "":
+		if dir.current_is_dir() and not entry.begins_with(".") and not entry.begins_with("_"):
+			# skip the framework itself
+			if entry == "qualiamods":
+				entry = dir.get_next()
+				continue
+
+			# skip if already found as .pck
+			if entry in mods:
+				entry = dir.get_next()
+				continue
+
+			var cfg_path := "res://mods/%s/mod.cfg" % entry
+			if FileAccess.file_exists(cfg_path):
+				var info := ModInfo.new()
+				info.id = entry
+				info.pck_path = ""  # no .pck — loose directory
+				info.enabled = true
+				info.name = entry
+				info.version = "?"
+				info.author = "?"
+				info.load_order = 0
+				info.config = {}
+				info.config_hints = {}
+				info.dependencies = {}
+				mods[entry] = info
+				print("[QualiaMods] Editor mod: %s" % entry)
+
 		entry = dir.get_next()
 
 

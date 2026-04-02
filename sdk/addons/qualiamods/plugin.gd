@@ -2,23 +2,19 @@
 extends EditorPlugin
 
 var _new_mod_button: Button
+var _setup_button: Button
 var _new_mod_dialog: AcceptDialog
 var _cfg_dock: Control
+var _installer: Node
 var _poll_timer: float = 0.0
 var _last_selected: String = ""
 
 
 func _enter_tree() -> void:
-	# toolbar button
-	_new_mod_button = Button.new()
-	_new_mod_button.text = "New Mod"
-	_new_mod_button.pressed.connect(_on_new_mod_pressed)
-	add_control_to_container(CONTAINER_TOOLBAR, _new_mod_button)
-
-	# cfg editor dock (right side, tabbed with Inspector/Node/History area)
-	_cfg_dock = preload("res://addons/qualiamods/mod_cfg_dock.gd").new()
-	_cfg_dock.name = "CFG Editor"
-	add_control_to_dock(DOCK_SLOT_RIGHT_UL, _cfg_dock)
+	if _is_framework_installed():
+		_show_mod_tools()
+	else:
+		_show_setup_button()
 
 	set_process(true)
 	print("[QualiaMods Plugin] Loaded")
@@ -30,6 +26,11 @@ func _exit_tree() -> void:
 		_new_mod_button.queue_free()
 		_new_mod_button = null
 
+	if _setup_button:
+		remove_control_from_container(CONTAINER_TOOLBAR, _setup_button)
+		_setup_button.queue_free()
+		_setup_button = null
+
 	if _new_mod_dialog and is_instance_valid(_new_mod_dialog):
 		_new_mod_dialog.queue_free()
 		_new_mod_dialog = null
@@ -38,6 +39,10 @@ func _exit_tree() -> void:
 		remove_control_from_docks(_cfg_dock)
 		_cfg_dock.queue_free()
 		_cfg_dock = null
+
+	if _installer and is_instance_valid(_installer):
+		_installer.queue_free()
+		_installer = null
 
 
 func _process(delta: float) -> void:
@@ -52,6 +57,78 @@ func _process(delta: float) -> void:
 		_last_selected = path
 		if _cfg_dock:
 			_cfg_dock.load_cfg(path)
+
+
+# ── Framework detection ──────────────────────────────────────────
+
+func _is_framework_installed() -> bool:
+	return FileAccess.file_exists("res://mods/qualiamods/qualiamods.gd")
+
+
+# ── Setup mode (framework not installed) ─────────────────────────
+
+func _show_setup_button() -> void:
+	_setup_button = Button.new()
+	_setup_button.text = "Setup QualiaMods"
+	_setup_button.tooltip_text = "Download and install QualiaMods framework into this project"
+	_setup_button.pressed.connect(_on_setup_pressed)
+	add_control_to_container(CONTAINER_TOOLBAR, _setup_button)
+
+
+func _on_setup_pressed() -> void:
+	_setup_button.disabled = true
+	_setup_button.text = "Installing..."
+
+	var installer_script = load("res://addons/qualiamods/installer.gd")
+	_installer = installer_script.new()
+	add_child(_installer)
+
+	_installer.install_progress.connect(func(step: String):
+		_setup_button.text = step
+	)
+	_installer.install_finished.connect(_on_install_finished)
+	_installer.start_install()
+
+
+func _on_install_finished(success: bool, message: String) -> void:
+	if _installer:
+		_installer.queue_free()
+		_installer = null
+
+	if success:
+		print("[QualiaMods Plugin] %s" % message)
+		# switch to mod tools mode
+		if _setup_button:
+			remove_control_from_container(CONTAINER_TOOLBAR, _setup_button)
+			_setup_button.queue_free()
+			_setup_button = null
+		_show_mod_tools()
+
+		# prompt to reload project
+		var dialog := AcceptDialog.new()
+		dialog.title = "QualiaMods Installed"
+		dialog.dialog_text = message + "\n\nPlease reload the project (Project → Reload Current Project)."
+		EditorInterface.get_base_control().add_child(dialog)
+		dialog.popup_centered()
+	else:
+		printerr("[QualiaMods Plugin] Install failed: %s" % message)
+		_setup_button.text = "Setup QualiaMods (retry)"
+		_setup_button.disabled = false
+
+
+# ── Mod tools mode (framework installed) ─────────────────────────
+
+func _show_mod_tools() -> void:
+	# toolbar button
+	_new_mod_button = Button.new()
+	_new_mod_button.text = "New Mod"
+	_new_mod_button.pressed.connect(_on_new_mod_pressed)
+	add_control_to_container(CONTAINER_TOOLBAR, _new_mod_button)
+
+	# cfg editor dock
+	_cfg_dock = preload("res://addons/qualiamods/mod_cfg_dock.gd").new()
+	_cfg_dock.name = "CFG Editor"
+	add_control_to_dock(DOCK_SLOT_RIGHT_UL, _cfg_dock)
 
 
 func _on_new_mod_pressed() -> void:

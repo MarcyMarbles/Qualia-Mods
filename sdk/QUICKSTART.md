@@ -5,10 +5,21 @@ Create your first mod for Lucid Blocks in 5 minutes.
 ## Prerequisites
 
 - Godot 4.6 stable (double precision) — [compile instructions](https://docs.godotengine.org/en/stable/contributing/development/compiling/)
-- Lucid Blocks opened in the Godot editor
-- QualiaMods `.pck` installed in the game's `mods/` folder
+- Lucid Blocks source opened in the Godot editor
 
-## 1. Create mod folder
+## 0. Install the framework (one-time setup)
+
+1. Copy the `addons/qualiamods/` folder into your game project's `addons/` directory
+2. In Godot: **Project → Project Settings → Plugins** → enable **QualiaMods**
+3. Click **"Setup QualiaMods"** in the toolbar — this downloads and installs the framework
+4. Reload the project when prompted (**Project → Reload Current Project**)
+
+That's it. The plugin handles everything: downloading files from GitHub,
+placing them in the correct locations, and backing up original files.
+
+## 1. Create a mod
+
+Click **"New Mod"** in the toolbar, or manually create:
 
 ```
 mods/
@@ -16,8 +27,6 @@ mods/
     mod.cfg
     mod_main.gd
 ```
-
-Create a folder inside `res://mods/` with your mod's ID (lowercase, underscores ok).
 
 ## 2. Write mod.cfg
 
@@ -53,18 +62,25 @@ That's it. No `const MOD_ID`, no manual hook subscriptions, no boilerplate.
 - `config` dict is pre-filled from mod.cfg `[config]` section
 - `_on_game_playable()` auto-subscribes to the `game_playable` hook
 
-## 4. Pack your mod
+## 4. Test in editor (recommended)
+
+Just press **F5** (Play) in the Godot editor. QualiaMods automatically
+detects editor mode and discovers loose mod directories in `res://mods/`.
+No `.pck` packing needed for development.
+
+- Full **Remote** debugger works (breakpoints, inspector, scene tree)
+- Edit code → F5 → see changes immediately
+- Console output shows `[QualiaMods] Editor mod: mymod`
+
+## 5. Pack for distribution
+
+When your mod is ready to share:
 
 ```bash
 godot --headless --script res://sdk/pack_mod.gd -- mymod
 ```
 
-This creates `mymod.pck` — share it with others!
-
-## 5. Test
-
-Drop the `.pck` into the game's `mods/` folder and launch the game.
-Press **F10** to open the Mods Menu and verify your mod appears.
+This creates `mymod.pck`. Users drop it into the game's `mods/` folder.
 
 ---
 
