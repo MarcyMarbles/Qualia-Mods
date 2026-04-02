@@ -1,31 +1,28 @@
-extends Node
+extends "res://mods/qualiamods/mod_base.gd"
 
-## mod_main.gd - Mod entry point.
-## This script becomes a child node of ModLoader when loaded.
-## Rename MOD_ID and implement the lifecycle methods you need.
+## mod_main.gd — Mod entry point.
+## Extend ModBase for auto-wiring: mod_id, config, and hooks
+## are set up for you. Just override what you need.
 ##
-## mod_main.gd - Точка входа мода.
-## Этот скрипт становится дочерней нодой ModLoader при загрузке.
-## Переименуй MOD_ID и реализуй нужные lifecycle-методы.
-
-const MOD_ID := "mymod"
-
-var config: Dictionary
+## mod_main.gd — Точка входа мода.
+## Наследуйся от ModBase для авто-подключения: mod_id, config и хуки
+## настраиваются автоматически. Просто переопредели что нужно.
 
 
-## Called first. config contains values from mod.cfg [config]
-## merged with user overrides from mods/<mod_id>.cfg.
-##
-## Вызывается первым. config содержит значения из mod.cfg [config]
-## с учётом пользовательских оверрайдов из mods/<mod_id>.cfg.
-func _init_mod(cfg: Dictionary) -> void:
-	config = cfg
+## Called after config and hooks are wired.
+## Вызывается после настройки конфига и хуков.
+func _setup() -> void:
+	# Subscribe to hooks by defining methods like:
+	#   func _on_game_playable() -> void:
+	#   func _on_world_loaded() -> void:
+	# They auto-subscribe — no manual add_hook() needed.
+	#
+	# Подписка на хуки через определение методов:
+	#   func _on_game_playable() -> void:
+	#   func _on_world_loaded() -> void:
+	# Они подписываются автоматически — add_hook() не нужен.
 
-	# Subscribe to hooks / Подписка на хуки:
-	# ModLoader.add_hook(ModLoader.Hooks.GAME_PLAYABLE, _on_game_playable)
-	# ModLoader.add_hook(ModLoader.Hooks.WORLD_LOADED, _on_world_loaded)
-
-	ModLoader.log_mod(MOD_ID, "Initialized")
+	log("Initialized")
 
 
 ## Called when the game scene tree is ready.
@@ -39,17 +36,11 @@ func _game_ready() -> void:
 
 ## User changed config in Mods Menu and pressed "save".
 ## Пользователь изменил конфиг в Mods Menu и нажал "save".
-func _on_config_changed(new_config: Dictionary) -> void:
-	config = new_config
-
-
-## Message from another mod (via ModLoader.send_message / broadcast_message).
-## Сообщение от другого мода (через ModLoader.send_message / broadcast_message).
-func _on_mod_message(sender_id: String, data: Dictionary) -> void:
+func _config_changed() -> void:
 	pass
 
 
 ## Mod is being unloaded (game exit / reload).
 ## Мод выгружается (выход из игры / перезагрузка).
-func _mod_cleanup() -> void:
+func _cleanup() -> void:
 	pass

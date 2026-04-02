@@ -145,26 +145,17 @@ func _show_error(msg: String) -> void:
 
 
 const MOD_MAIN_TEMPLATE := \
-"""extends Node
-
-const MOD_ID := "{{MOD_ID}}"
-
-var config: Dictionary
+"""extends "res://mods/qualiamods/mod_base.gd"
 
 
-func _init_mod(cfg: Dictionary) -> void:
-	config = cfg
-	ModLoader.log_mod(MOD_ID, "Initialized")
+func _setup() -> void:
+	log("Initialized")
 
 
 func _game_ready() -> void:
 	pass
 
 
-func _on_config_changed(new_config: Dictionary) -> void:
-	config = new_config
-
-
-func _mod_cleanup() -> void:
+func _cleanup() -> void:
 	pass
 """
