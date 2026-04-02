@@ -2,8 +2,12 @@
 extends EditorPlugin
 
 var _new_mod_button: Button
+var _pack_button: Button
+var _hooks_button: Button
 var _setup_button: Button
 var _new_mod_dialog: AcceptDialog
+var _pack_dialog: AcceptDialog
+var _hooks_dialog: AcceptDialog
 var _cfg_dock: Control
 var _installer: Node
 var _poll_timer: float = 0.0
@@ -21,19 +25,21 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
-	if _new_mod_button:
-		remove_control_from_container(CONTAINER_TOOLBAR, _new_mod_button)
-		_new_mod_button.queue_free()
-		_new_mod_button = null
+	for btn in [_new_mod_button, _pack_button, _hooks_button, _setup_button]:
+		if btn:
+			remove_control_from_container(CONTAINER_TOOLBAR, btn)
+			btn.queue_free()
+	_new_mod_button = null
+	_pack_button = null
+	_hooks_button = null
+	_setup_button = null
 
-	if _setup_button:
-		remove_control_from_container(CONTAINER_TOOLBAR, _setup_button)
-		_setup_button.queue_free()
-		_setup_button = null
-
-	if _new_mod_dialog and is_instance_valid(_new_mod_dialog):
-		_new_mod_dialog.queue_free()
-		_new_mod_dialog = null
+	for dlg in [_new_mod_dialog, _pack_dialog, _hooks_dialog]:
+		if dlg and is_instance_valid(dlg):
+			dlg.queue_free()
+	_new_mod_dialog = null
+	_pack_dialog = null
+	_hooks_dialog = null
 
 	if _cfg_dock:
 		remove_control_from_docks(_cfg_dock)
@@ -97,14 +103,12 @@ func _on_install_finished(success: bool, message: String) -> void:
 
 	if success:
 		print("[QualiaMods Plugin] %s" % message)
-		# switch to mod tools mode
 		if _setup_button:
 			remove_control_from_container(CONTAINER_TOOLBAR, _setup_button)
 			_setup_button.queue_free()
 			_setup_button = null
 		_show_mod_tools()
 
-		# prompt to reload project
 		var dialog := AcceptDialog.new()
 		dialog.title = "QualiaMods Installed"
 		dialog.dialog_text = message + "\n\nPlease reload the project (Project → Reload Current Project)."
@@ -119,13 +123,28 @@ func _on_install_finished(success: bool, message: String) -> void:
 # ── Mod tools mode (framework installed) ─────────────────────────
 
 func _show_mod_tools() -> void:
-	# toolbar button
+	# New Mod button
 	_new_mod_button = Button.new()
 	_new_mod_button.text = "New Mod"
+	_new_mod_button.tooltip_text = "Create a new mod from template"
 	_new_mod_button.pressed.connect(_on_new_mod_pressed)
 	add_control_to_container(CONTAINER_TOOLBAR, _new_mod_button)
 
-	# cfg editor dock
+	# Pack Mod button
+	_pack_button = Button.new()
+	_pack_button.text = "Pack Mod"
+	_pack_button.tooltip_text = "Pack a mod into .pck for distribution"
+	_pack_button.pressed.connect(_on_pack_pressed)
+	add_control_to_container(CONTAINER_TOOLBAR, _pack_button)
+
+	# Hooks Browser button
+	_hooks_button = Button.new()
+	_hooks_button.text = "Hooks"
+	_hooks_button.tooltip_text = "Browse available hooks and insert into your script"
+	_hooks_button.pressed.connect(_on_hooks_pressed)
+	add_control_to_container(CONTAINER_TOOLBAR, _hooks_button)
+
+	# CFG editor dock
 	_cfg_dock = preload("res://addons/qualiamods/mod_cfg_dock.gd").new()
 	_cfg_dock.name = "CFG Editor"
 	add_control_to_dock(DOCK_SLOT_RIGHT_UL, _cfg_dock)
@@ -142,3 +161,17 @@ func _on_new_mod_pressed() -> void:
 func _on_mod_created(mod_id: String) -> void:
 	EditorInterface.get_resource_filesystem().scan()
 	print("[QualiaMods Plugin] Created mod: %s" % mod_id)
+
+
+func _on_pack_pressed() -> void:
+	if not _pack_dialog or not is_instance_valid(_pack_dialog):
+		_pack_dialog = preload("res://addons/qualiamods/pack_dialog.gd").new()
+		EditorInterface.get_base_control().add_child(_pack_dialog)
+	_pack_dialog.popup_centered()
+
+
+func _on_hooks_pressed() -> void:
+	if not _hooks_dialog or not is_instance_valid(_hooks_dialog):
+		_hooks_dialog = preload("res://addons/qualiamods/hooks_dialog.gd").new()
+		EditorInterface.get_base_control().add_child(_hooks_dialog)
+	_hooks_dialog.popup_centered()
