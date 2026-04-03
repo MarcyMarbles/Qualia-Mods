@@ -9,6 +9,7 @@ extends Node
 ##   - convenience: log_info(), get_cfg(), settings_tab()
 ##
 ## Lifecycle (override what you need):
+##   _early_setup()     — called BEFORE game autoloads run (synchronous, no await)
 ##   _setup()           — called after config + hooks are wired
 ##   _game_ready()      — scene tree ready, Ref.* valid
 ##   _config_changed()  — user changed config in Mods Menu
@@ -59,6 +60,14 @@ func _mod_cleanup() -> void:
 
 
 # ── Override these in your mod ───────────────────────────────────
+
+## Called BEFORE game autoloads (ItemMap, etc.) run.
+## Runs synchronously during bootstrap — no await allowed.
+## The node is already in the tree: get_tree() works.
+## Use for early interception (e.g. node_added signals).
+func _early_setup() -> void:
+	pass
+
 
 ## Called after config and hooks are wired. Use instead of _init_mod().
 func _setup() -> void:

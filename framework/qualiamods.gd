@@ -340,7 +340,7 @@ func _bootstrap() -> void:
 
 	_mods_dir_path = OS.get_executable_path().get_base_dir().path_join("mods")
 	_load_self_config()
-	print("[QualiaMods] v1.3.0 — Phase 2 starting")
+	print("[QualiaMods] v2.0.0-RC1 — Phase 2 starting")
 	print("[QualiaMods] Game version: ", ProjectSettings.get_setting("application/config/version"))
 	print("[QualiaMods] Mods dir: %s" % _mods_dir_path)
 
@@ -360,6 +360,7 @@ func _bootstrap() -> void:
 
 	_discover_mods()
 	_resolve_load_order()
+	_early_init_mods()
 	_load_mod_translations()
 	_create_loading_screen()
 	await RenderingServer.frame_post_draw
@@ -779,6 +780,32 @@ func _finalize_loading_screen() -> void:
 	)
 
 
+# Synchronous early init — runs BEFORE the first await in _bootstrap(),
+# so mods can intercept nodes (e.g. IconGenerator) before game autoloads proceed.
+func _early_init_mods() -> void:
+	for mod_id in _load_order:
+		var info: ModInfo = mods[mod_id]
+		if not info.enabled:
+			continue
+
+		var script_path := "res://mods/%s/mod_main.gd" % mod_id
+		if not FileAccess.file_exists(script_path):
+			continue
+
+		var script := load(script_path)
+		if not script:
+			continue
+
+		var instance: Node = script.new()
+		instance.name = "Mod_%s" % mod_id
+		info.instance = instance
+		add_child(instance)
+
+		if instance.has_method("_early_setup"):
+			instance._early_setup()
+			print("[QualiaMods] Early setup: %s" % info.name)
+
+
 # load mod_main.gd for each mod, add to tree, call _init_mod
 func _initialize_mods_async() -> void:
 	for mod_id in _load_order:
@@ -798,16 +825,18 @@ func _initialize_mods_async() -> void:
 			await RenderingServer.frame_post_draw
 			continue
 
-		var script := load(script_path)
-		if not script:
-			printerr("[QualiaMods] Failed to load: %s" % script_path)
-			await RenderingServer.frame_post_draw
-			continue
-
-		var instance: Node = script.new()
-		instance.name = "Mod_%s" % mod_id
-		info.instance = instance
-		add_child(instance)
+		# Reuse instance from _early_init_mods() if it exists
+		var instance: Node = info.instance
+		if not instance:
+			var script := load(script_path)
+			if not script:
+				printerr("[QualiaMods] Failed to load: %s" % script_path)
+				await RenderingServer.frame_post_draw
+				continue
+			instance = script.new()
+			instance.name = "Mod_%s" % mod_id
+			info.instance = instance
+			add_child(instance)
 
 		if instance.has_method("_init_mod"):
 			instance._init_mod(info.config)
