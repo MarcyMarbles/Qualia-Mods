@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.0.0-RC1
+
+### Added
+- **`_early_setup()` lifecycle hook** — mods can now override `_early_setup()` to run code synchronously during bootstrap, before game autoloads (ItemMap, etc.) start their async work. The node is already in the tree so `get_tree()` works, but no `await` is allowed. Enables interception of game nodes like IconGenerator before they execute.
+- **ModBase class** — new base class for zero-boilerplate mod development
+  - Auto-detects `mod_id` from folder name
+  - Pre-populates `config` from mod.cfg + user overrides
+  - Auto-wires `_on_<hook>()` methods — just define the method, no manual `add_hook()` needed
+  - Convenience helpers: `log_info()`, `get_cfg()`, `settings_tab()`
+  - Full lifecycle: `_early_setup()` → `_setup()` → `_game_ready()` → `_config_changed()` → `_cleanup()`
+- **Godot editor plugin** — SDK addon for the Godot editor
+  - **New Mod dialog** — scaffolds mod directory with mod.cfg and mod_main.gd
+  - **Pack Mod** — select a mod from `res://mods/`, one-click .pck export with .gd.remap generation
+  - **Hooks Browser** — lists all available hooks with phase, description, and "Insert into current script" button
+  - **One-click framework installer** — "Setup QualiaMods" button downloads all framework files from GitHub
+  - **mod.cfg dock** — inspector panel for editing mod metadata
+- **Editor dev mode** — `_scan_editor_mods()` discovers loose mod directories in `res://mods/` when running from the Godot editor, no .pck packing needed for testing
+
+### Changed
+- `log()` renamed to `log_info()` to avoid conflict with GDScript builtin `log()` (natural logarithm)
+- Mod instances created in `_early_init_mods()` are reused by `_initialize_mods_async()` instead of being recreated
+
 ## v1.3.1
 
 ### Added
