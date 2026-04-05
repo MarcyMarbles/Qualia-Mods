@@ -127,12 +127,22 @@ func _build_config_editor(mod_id: String, info) -> void:
 			row.add_child(btn)
 		elif value is float or value is int:
 			var spinbox := SpinBox.new()
-			spinbox.value = value
 			spinbox.editable = editable
 			spinbox.custom_minimum_size = Vector2(50, 0)
 			if value is float:
 				spinbox.step = 0.1
 				spinbox.rounded = false
+			# apply config hints (min/max/step) from mod.cfg
+			var hints: Dictionary = info.config_hints.get(key, {})
+			if hints.has("min"):
+				spinbox.min_value = hints["min"]
+			if hints.has("max"):
+				spinbox.max_value = hints["max"]
+			else:
+				spinbox.max_value = 10000
+			if hints.has("step"):
+				spinbox.step = hints["step"]
+			spinbox.value = value
 			spinbox.set_meta("config_control", true)
 			row.add_child(spinbox)
 		else:
