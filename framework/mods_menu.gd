@@ -157,6 +157,7 @@ func _build_config_editor(mod_id: String, info) -> void:
 
 
 func _on_save_config() -> void:
+	get_viewport().gui_release_focus()
 	if selected_mod_id == "":
 		return
 
