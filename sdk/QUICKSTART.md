@@ -1,0 +1,186 @@
+# QualiaMods — Quickstart Guide
+
+Create your first mod for Lucid Blocks in 5 minutes.
+
+## Prerequisites
+
+- Godot 4.6 stable (double precision) — [compile instructions](https://docs.godotengine.org/en/stable/contributing/development/compiling/)
+- Lucid Blocks source opened in the Godot editor
+
+## 0. Install the framework (one-time setup)
+
+1. Copy the `addons/qualiamods/` folder into your game project's `addons/` directory
+2. In Godot: **Project → Project Settings → Plugins** → enable **QualiaMods**
+3. Click **"Setup QualiaMods"** in the toolbar — this downloads and installs the framework
+4. Reload the project when prompted (**Project → Reload Current Project**)
+
+That's it. The plugin handles everything: downloading files from GitHub,
+placing them in the correct locations, and backing up original files.
+
+## 1. Create a mod
+
+Click **"New Mod"** in the toolbar, or manually create:
+
+```
+mods/
+  mymod/
+    mod.cfg
+    mod_main.gd
+```
+
+## 2. Write mod.cfg
+
+```ini
+[mod]
+name = "My First Mod"
+version = "1.0.0"
+author = "Your Name"
+description = "My first QualiaMods mod!"
+game_version = "2.8.7"
+
+[config]
+; Add default config values here (optional)
+; my_option = true
+```
+
+## 3. Write mod_main.gd
+
+```gdscript
+extends "res://mods/qualiamods/mod_base.gd"
+
+func _setup() -> void:
+    log_info("Hello world!")
+
+func _on_game_playable() -> void:
+    log_info("Player position: %s" % Ref.player.global_position)
+```
+
+That's it. No `const MOD_ID`, no manual hook subscriptions, no boilerplate.
+
+### What happens automatically:
+- `mod_id` is detected from your folder name (`"mymod"`)
+- `config` dict is pre-filled from mod.cfg `[config]` section
+- `_on_game_playable()` auto-subscribes to the `game_playable` hook
+
+## 4. Test in editor (recommended)
+
+Just press **F5** (Play) in the Godot editor. QualiaMods automatically
+detects editor mode and discovers loose mod directories in `res://mods/`.
+No `.pck` packing needed for development.
+
+- Full **Remote** debugger works (breakpoints, inspector, scene tree)
+- Edit code → F5 → see changes immediately
+- Console output shows `[QualiaMods] Editor mod: mymod`
+
+## 5. Pack for distribution
+
+When your mod is ready to share:
+
+```bash
+godot --headless --script res://sdk/pack_mod.gd -- mymod
+```
+
+This creates `mymod.pck`. Users drop it into the game's `mods/` folder.
+
+---
+
+## Recipes
+
+### Listen to game events
+
+Just define `_on_<hook_name>()` methods — they auto-subscribe:
+
+```gdscript
+func _on_world_loaded() -> void:
+    log_info("World loaded!")
+
+func _on_game_quit() -> void:
+    log_info("Goodbye!")
+```
+
+Available hooks: `world_loaded`, `game_playable`, `game_quit`, `all_loaded`,
+`new_game_loaded`, `items_pre_load`, `items_post_load`, `mods_all_ready`.
+
+### Read config values
+
+```ini
+# mod.cfg
+[config]
+speed_multiplier = 1.5
+enable_particles = true
+```
+
+```gdscript
+func _setup() -> void:
+    var speed = get_cfg("speed_multiplier", 1.0)
+    var particles = get_cfg("enable_particles", false)
+```
+
+### Add a settings tab
+
+```gdscript
+func _game_ready() -> void:
+    var tab = settings_tab("my mod")
+    tab.add_slider("speed", "speed_multiplier", 0.1, 5.0, 0.1, 1.0)
+    tab.add_toggle("particles", "enable_particles", false)
+    tab.load_values()
+    tab.saved.connect(func(values): config.merge(values, true))
+```
+
+### Modify game behavior
+
+```gdscript
+func _game_ready() -> void:
+    # Half all damage taken by the player
+    ModLoader.wrap_method(Ref.player, "take_damage", func(original, amount):
+        original.call(amount * 0.5)
+    )
+```
+
+### Add items
+
+Place `.tres` item resources in your mod folder, then register the path:
+
+```gdscript
+func _setup() -> void:
+    ModLoader.register_items("res://mods/%s/items" % mod_id)
+```
+
+### Inject UI elements
+
+```gdscript
+func _game_ready() -> void:
+    var label = Label.new()
+    label.text = "Hello from my mod!"
+    ModLoader.inject_node("Main/UI", label)
+```
+
+### Access game objects
+
+Use `Ref.*` for common game objects:
+
+```gdscript
+Ref.player          # Player node
+Ref.world           # LucidBlocksWorld
+Ref.weather         # Weather system
+Ref.settings_menu   # Settings Menu
+Ref.game_menu       # In-game menu
+Ref.player_inventory
+Ref.player_hotbar
+```
+
+---
+
+## ModBase vs raw Node
+
+You can still `extend Node` and use the low-level API (`_init_mod`, `ModLoader.add_hook`, etc.).
+ModBase is a convenience layer — it doesn't limit what you can do.
+
+| Feature | Raw Node | ModBase |
+|---------|----------|---------|
+| mod_id | `const MOD_ID := "..."` | Auto-detected |
+| Config | `var config; func _init_mod(cfg): config = cfg` | Pre-populated |
+| Hooks | `ModLoader.add_hook(Hooks.X, method)` | Name method `_on_x()` |
+| Logging | `ModLoader.log_mod(MOD_ID, msg)` | `log_info(msg)` |
+| Settings | 6+ lines of setup | `settings_tab("name")` |
+| Cleanup | Manual `remove_hook` calls | Automatic |

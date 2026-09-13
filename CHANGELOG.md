@@ -1,5 +1,41 @@
 # Changelog
 
+## v2.0.0-RC1
+
+### Added
+- **`_early_setup()` lifecycle hook** — mods can now override `_early_setup()` to run code synchronously during bootstrap, before game autoloads (ItemMap, etc.) start their async work. The node is already in the tree so `get_tree()` works, but no `await` is allowed. Enables interception of game nodes like IconGenerator before they execute.
+- **ModBase class** — new base class for zero-boilerplate mod development
+  - Auto-detects `mod_id` from folder name
+  - Pre-populates `config` from mod.cfg + user overrides
+  - Auto-wires `_on_<hook>()` methods — just define the method, no manual `add_hook()` needed
+  - Convenience helpers: `log_info()`, `get_cfg()`, `settings_tab()`
+  - Full lifecycle: `_early_setup()` → `_setup()` → `_game_ready()` → `_config_changed()` → `_cleanup()`
+- **Godot editor plugin** — SDK addon for the Godot editor
+  - **New Mod dialog** — scaffolds mod directory with mod.cfg and mod_main.gd
+  - **Pack Mod** — select a mod from `res://mods/`, one-click .pck export with .gd.remap generation
+  - **Hooks Browser** — lists all available hooks with phase, description, and "Insert into current script" button
+  - **One-click framework installer** — "Setup QualiaMods" button downloads all framework files from GitHub
+  - **mod.cfg dock** — inspector panel for editing mod metadata
+- **Editor dev mode** — `_scan_editor_mods()` discovers loose mod directories in `res://mods/` when running from the Godot editor, no .pck packing needed for testing
+
+### Changed
+- `log()` renamed to `log_info()` to avoid conflict with GDScript builtin `log()` (natural logarithm)
+- Mod instances created in `_early_init_mods()` are reused by `_initialize_mods_async()` instead of being recreated
+
+## v1.3.1
+
+### Added
+- **Lang subfolder support** — translations can now live in subfolders like `lang/ja/japanese.cfg` alongside font files, instead of only flat `lang/*.cfg`
+- **Per-locale custom fonts** — `font = "filename.ttf"` and `fontSize = 12` in `[meta]` section of translation `.cfg`; font path resolved relative to the `.cfg` file
+- **Language button without mods** — "Language" button now appears in main menu even with zero mods installed (shows "lang" when mods are present)
+- **Packer: imported resource support** — `pack_qualiamods.gd` now parses `.import` files to find compiled resources in `.godot/imported/` (`.ctex`, `.fontdata`, etc.) and packs them alongside source files automatically
+- **Packer: directory scanning** — `SCAN_DIRS` array for recursive resource discovery; moddders add their directory and the packer picks up fonts, textures, themes, etc.
+
+### Fixed
+- **i18n no longer depends on mods** — global translations from `<game_dir>/lang/` now load even when no mods are installed; previously the early return on empty mods list skipped i18n initialization entirely
+- Split i18n init into two phases: global translations load before the mods check, per-mod translations load after dependency resolution
+- **Locale restore** — switching back to English now restores original text and fonts; previously switching away from a non-English locale was a one-way operation
+
 ## v1.3.0
 
 ### Added

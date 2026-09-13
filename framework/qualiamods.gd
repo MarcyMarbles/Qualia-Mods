@@ -340,19 +340,28 @@ func _bootstrap() -> void:
 
 	_mods_dir_path = OS.get_executable_path().get_base_dir().path_join("mods")
 	_load_self_config()
-	print("[QualiaMods] v1.3.0 — Phase 2 starting")
+	print("[QualiaMods] v2.0.0-RC1 — Phase 2 starting")
 	print("[QualiaMods] Game version: ", ProjectSettings.get_setting("application/config/version"))
 	print("[QualiaMods] Mods dir: %s" % _mods_dir_path)
 
 	_scan_loaded_mods()
 
+	# Editor mode: discover loose mod directories in res://mods/
+	# so developers can hit Play and test without packing .pck files.
+	if OS.has_feature("editor"):
+		_scan_editor_mods()
+
+	_init_i18n()
+
 	if mods.is_empty():
 		print("[QualiaMods] No mods found.")
+		_deferred_inject_language.call_deferred()
 		return
 
 	_discover_mods()
 	_resolve_load_order()
-	_init_i18n()
+	_early_init_mods()
+	_load_mod_translations()
 	_create_loading_screen()
 	await RenderingServer.frame_post_draw
 	await _initialize_mods_async()
@@ -371,18 +380,18 @@ func _init_i18n() -> void:
 	i18n.name = "I18nManager"
 	add_child(i18n)
 
-	# 1. global translations from <game_dir>/lang/*.cfg
+	# global translations from <game_dir>/lang/*.cfg — always available
 	i18n.load_global_translations()
-
-	# 2. per-mod translations from res://mods/<id>/lang/*.cfg
-	i18n.load_mod_translations(_load_order)
-
-	# 3. restore saved locale choice
 	i18n.apply_saved_locale()
-
-	# patch existing tree after a frame so the game UI is loaded
 	i18n.patch_tree.call_deferred()
-	print("[QualiaMods] i18n initialized")
+	print("[QualiaMods] i18n initialized (global)")
+
+
+func _load_mod_translations() -> void:
+	if not i18n:
+		return
+	i18n.load_mod_translations(_load_order)
+	print("[QualiaMods] i18n mod translations loaded (%d mods)" % _load_order.size())
 
 
 func _load_self_config() -> void:
@@ -459,6 +468,48 @@ func _scan_dir_recursive(path: String, disabled_cfg: ConfigFile) -> void:
 				print("[QualiaMods] Found disabled: %s" % mod_id)
 			else:
 				print("[QualiaMods] Found: %s" % mod_id)
+		entry = dir.get_next()
+
+
+# editor mode: scan res://mods/ for loose directories with mod.cfg
+# allows testing mods without packing .pck — just hit Play in editor
+func _scan_editor_mods() -> void:
+	var dir := DirAccess.open("res://mods")
+	if not dir:
+		print("[QualiaMods] Editor mode: res://mods/ not found")
+		return
+
+	print("[QualiaMods] Editor mode: scanning res://mods/ for loose mods")
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while entry != "":
+		if dir.current_is_dir() and not entry.begins_with(".") and not entry.begins_with("_"):
+			# skip the framework itself
+			if entry == "qualiamods":
+				entry = dir.get_next()
+				continue
+
+			# skip if already found as .pck
+			if entry in mods:
+				entry = dir.get_next()
+				continue
+
+			var cfg_path := "res://mods/%s/mod.cfg" % entry
+			if FileAccess.file_exists(cfg_path):
+				var info := ModInfo.new()
+				info.id = entry
+				info.pck_path = ""  # no .pck — loose directory
+				info.enabled = true
+				info.name = entry
+				info.version = "?"
+				info.author = "?"
+				info.load_order = 0
+				info.config = {}
+				info.config_hints = {}
+				info.dependencies = {}
+				mods[entry] = info
+				print("[QualiaMods] Editor mod: %s" % entry)
+
 		entry = dir.get_next()
 
 
@@ -729,6 +780,32 @@ func _finalize_loading_screen() -> void:
 	)
 
 
+# Synchronous early init — runs BEFORE the first await in _bootstrap(),
+# so mods can intercept nodes (e.g. IconGenerator) before game autoloads proceed.
+func _early_init_mods() -> void:
+	for mod_id in _load_order:
+		var info: ModInfo = mods[mod_id]
+		if not info.enabled:
+			continue
+
+		var script_path := "res://mods/%s/mod_main.gd" % mod_id
+		if not FileAccess.file_exists(script_path):
+			continue
+
+		var script := load(script_path)
+		if not script:
+			continue
+
+		var instance: Node = script.new()
+		instance.name = "Mod_%s" % mod_id
+		info.instance = instance
+		add_child(instance)
+
+		if instance.has_method("_early_setup"):
+			instance._early_setup()
+			print("[QualiaMods] Early setup: %s" % info.name)
+
+
 # load mod_main.gd for each mod, add to tree, call _init_mod
 func _initialize_mods_async() -> void:
 	for mod_id in _load_order:
@@ -748,16 +825,18 @@ func _initialize_mods_async() -> void:
 			await RenderingServer.frame_post_draw
 			continue
 
-		var script := load(script_path)
-		if not script:
-			printerr("[QualiaMods] Failed to load: %s" % script_path)
-			await RenderingServer.frame_post_draw
-			continue
-
-		var instance: Node = script.new()
-		instance.name = "Mod_%s" % mod_id
-		info.instance = instance
-		add_child(instance)
+		# Reuse instance from _early_init_mods() if it exists
+		var instance: Node = info.instance
+		if not instance:
+			var script := load(script_path)
+			if not script:
+				printerr("[QualiaMods] Failed to load: %s" % script_path)
+				await RenderingServer.frame_post_draw
+				continue
+			instance = script.new()
+			instance.name = "Mod_%s" % mod_id
+			info.instance = instance
+			add_child(instance)
 
 		if instance.has_method("_init_mod"):
 			instance._init_mod(info.config)
@@ -846,6 +925,12 @@ func _inject_mods_button() -> void:
 
 var _lang_menu: Control = null
 
+
+func _deferred_inject_language() -> void:
+	await get_tree().process_frame
+	_inject_language_selector()
+
+
 func _inject_language_selector() -> void:
 	if not i18n or i18n.available_locales.size() < 2:
 		print("[QualiaMods] Less than 2 locales, skipping language selector")
@@ -857,14 +942,23 @@ func _inject_language_selector() -> void:
 
 	var row = main_menu.find_child("QualiaModsRow", true, false)
 	if not row:
-		print("[QualiaMods] QualiaModsRow not found, skipping language selector")
-		return
+		# no mods loaded — create standalone row for the language button
+		var settings_btn = main_menu.get_node_or_null("%SettingsButton")
+		if not settings_btn:
+			return
+		row = HBoxContainer.new()
+		row.name = "QualiaModsRow"
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_theme_constant_override("separation", 2)
+		var idx: int = settings_btn.get_index()
+		settings_btn.get_parent().add_child(row)
+		settings_btn.get_parent().move_child(row, idx + 1)
 
 	var sound_script = load("res://main/ui/theme/sound_button.gd")
 
 	var lang_btn := Button.new()
 	lang_btn.name = "LanguageButton"
-	lang_btn.text = "lang"
+	lang_btn.text = "Language" if mods.is_empty() else "lang"
 	lang_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if sound_script:
 		lang_btn.set_script(sound_script)
