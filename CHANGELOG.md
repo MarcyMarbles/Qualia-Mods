@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.1
+
+Stable 2.x — promotes v2.0.0-RC1, dev-experience merged to master.
+
+### 2.0.1 fix
+- Fix config save without Enter — Problem: typed SpinBox value in Mods Menu config editor silently discarded on Save without Enter.
+
 ## v2.0.0-RC1
 
 ### Added
