@@ -83,6 +83,8 @@ func _init() -> void:
 				else:
 					printerr("[PackMod] FAIL remap %s" % remap_path)
 				DirAccess.remove_absolute(ProjectSettings.globalize_path(remap_temp))
+		elif file_path.ends_with(".import"):
+			_pack_import(packer, file_path)
 
 	err = packer.flush()
 	if err != OK:
@@ -92,6 +94,21 @@ func _init() -> void:
 
 	print("[PackMod] Done! %d files + %d remaps -> %s" % [files.size(), remap_count, output_path])
 	quit(0)
+
+
+func _pack_import(packer: PCKPacker, import_path: String) -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(import_path) != OK:
+		return
+	var deps: Array = cfg.get_value("deps", "dest_files", [])
+	var primary := str(cfg.get_value("remap", "path", ""))
+	if primary != "" and not deps.has(primary):
+		deps.append(primary)
+	for dep in deps:
+		var path := str(dep)
+		if path != "" and FileAccess.file_exists(path):
+			packer.add_file(path, path)
+			print("[PackMod] + %s" % path)
 
 
 func _scan_dir(path: String, result: Array[String]) -> void:
@@ -110,7 +127,6 @@ func _scan_dir(path: String, result: Array[String]) -> void:
 		if dir.current_is_dir():
 			_scan_dir(full_path, result)
 		else:
-			# Skip .uid files and .import files - they are editor-only
-			if not entry.ends_with(".uid") and not entry.ends_with(".import"):
+			if not entry.ends_with(".uid"):
 				result.append(full_path)
 		entry = dir.get_next()

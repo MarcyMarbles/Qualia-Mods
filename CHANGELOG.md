@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.2
+
+## packer fix
+sdk/pack_mod.gd skipped .import files so textures or fonts failed at runtime with error "No loader found for resource..." (mentioned in #5)
+now they packing .import alongside the resource.
+
 ## v2.0.1
 
 Stable 2.x — promotes v2.0.0-RC1, dev-experience merged to master.
