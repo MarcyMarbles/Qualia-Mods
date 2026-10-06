@@ -1,14 +1,12 @@
 # Changelog
 
-## v2.0.2
-
-## packer fix
-sdk/pack_mod.gd skipped .import files so textures or fonts failed at runtime with error "No loader found for resource..." (mentioned in #5)
-now they packing .import alongside the resource.
-
 ## v2.0.1
 
 Stable 2.x — promotes v2.0.0-RC1, dev-experience merged to master.
+
+### SDK updates
+- Packer fix (#5): `sdk/pack_mod.gd` now packs each `.import` alongside its compiled resource, so textures/fonts no longer fail at runtime with "No loader found for resource...".
+- Pack Mod widget upgrade: allow to select any files from the game to pack (can pack non-qualiamods mods if packing changed vanilla files only, without the mods/mod dir).
 
 ### 2.0.1 fix
 - Fix config save without Enter — Problem: typed SpinBox value in Mods Menu config editor silently discarded on Save without Enter.
